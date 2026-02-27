@@ -1,6 +1,22 @@
+# Build/output
 build/
 out/
+
+# Visual Studio / CMake generated
+.vs/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Windows build artifacts
 *.exe
-*.vtk
+*.dll
+*.lib
+*.exp
 *.obj
 *.pdb
+*.ilk
+
+# Simulation outputs (keep repo clean)
+*.vtk
+*.csv
