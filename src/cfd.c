@@ -25,7 +25,7 @@ int main(void)
 	const int NCELLS = NX * NY * NZ;
 
 	// Allocate Arrays
-	const int NEQNS = 3; // Number of equations solved
+	const int NEQNS = 1; // Number of equations solved
 
 	// Conservative variable fields [rho, rho*u, rho*v]
 	double* phi = malloc((NCELLS * NEQNS)* sizeof(double)); // Solution variable
@@ -51,16 +51,20 @@ int main(void)
 				// Cell Centroid coordinates
 				double x = x0 + dx / 2 + i * dx; //x cell centroid points
 				double y = y0 + dy / 2 + j * dy; //y cell centroid points 
-
 				
 				// Allocate Fields
 				if (eq == 0) { phi[idx] = 1; } else //Density
 				if (eq == 1) { phi[idx] = 0; } else //x-momentum
 				if (eq == 2) { phi[idx] = 0; } else //y-momentum
-				{ phi[idx] = 0; }                    //other unspecified 
+				{ phi[idx] = 0; }                   //other unspecified 
+
+				// Calculate Matrix Coefficients
+
+
 			}
 		}
 	}
+	
 	
 	/*----- Write legacy .vtk file-------*/
 	// Create file 
@@ -86,7 +90,7 @@ int main(void)
 
 	// Data
 	fprintf(fp, "CELL_DATA %d\n", NCELLS);
-	fprintf(fp, "SCALARS density float 1\n");
+	fprintf(fp, "SCALARS phi(0) float 1\n");
 	fprintf(fp, "LOOKUP_TABLE default\n");
 
 	// Save Density Scalar Data
@@ -99,6 +103,7 @@ int main(void)
 		}
 	}
 	
+	/*
 	// Save Momentum Vector Data
 	fprintf(fp, "VECTORS momentum float\n");
 	for (int j = 0; j < NY; j++)
@@ -111,6 +116,7 @@ int main(void)
 			fprintf(fp, "%f %f %f\n", (float)phi[idx_mx], (float)phi[idx_my], 0.0f);
 		}
 	}
+	*/
 
 	fclose(fp);
 

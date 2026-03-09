@@ -3,5 +3,5 @@ project(CFD_Solver C)
 set(CMAKE_C_STANDARD 99)
 
 add_executable(cfd
-  src/main.c
+  "src/cfd.c"
 )
