@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include "cfd.h"
 
 /* Indexing macros (row major)*/
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
@@ -8,6 +9,8 @@
 
 int main(void)
 {
+
+	// Create Read grid function to read the points and then create arrays 
 	// Grid Setup
 	const int NX = 100; //Number Divisions x-direction
 	const int NY = 100; //Number divisions y-direction
@@ -23,6 +26,7 @@ int main(void)
 	const double dz = (z1 - z0) / NZ; // Grid spacing z-direction
 
 	const int NCELLS = NX * NY * NZ;
+	const int NPOINTS = (NX + 1) * (NY + 1) * (NZ + 1);
 
 	// Allocate Arrays
 	const int NEQNS = 1; // Number of equations solved
@@ -30,6 +34,7 @@ int main(void)
 	// Conservative variable fields [rho, rho*u, rho*v]
 	double* phi = malloc((NCELLS * NEQNS)* sizeof(double)); // Solution variable
 
+	
 	// Check for correct memory allocation
 	if (phi == NULL)
 	{
@@ -38,7 +43,21 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
-	// Loop over grid and initialize variables
+	// Nodes array
+	node* nodes = malloc(NPOINTS * sizeof(node)); // Node coordinates array
+
+	if (nodes == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for nodes array.\n");
+		return 1; // Exit with error code
+	}
+
+	// Calculate Node Coordinates
+	for (int i = 0; i < NPOINTS; i++)
+	{
+
+	}
+	// Loop over grid and initialize conservative ariables
 	for (int eq = 0; eq < NEQNS; eq++) //loop over conservative fields
 	{
 		for (int j = 0; j < NY; j++) // loop over y
@@ -58,14 +77,12 @@ int main(void)
 				if (eq == 2) { phi[idx] = 0; } else //y-momentum
 				{ phi[idx] = 0; }                   //other unspecified 
 
-				// Calculate Matrix Coefficients
-
 
 			}
 		}
 	}
 	
-	
+
 	/*----- Write legacy .vtk file-------*/
 	// Create file 
 	FILE* fp = fopen("uniform_2d.vtk", "w"); //open file in write mode
@@ -122,6 +139,7 @@ int main(void)
 
 	// Free Memory
 	free(phi);
+	free(nodes);
 
 	printf("To C or not to C: that is the question. \n");
 	return 0;
