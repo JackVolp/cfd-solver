@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
+#include <stdbool.h>
 #include "cfd.h"
 
 /* Indexing macros (row major)*/
@@ -8,8 +10,20 @@
 #define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
 
 int main(void)
-{
+{		
+	node* nodes;
+	cell* cells; 
 
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0;
+
+	int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
+
+	free(nodes);
+	free(cells);
+
+	
+
+	/*
 	// Create Read grid function to read the points and then create arrays 
 	// Grid Setup
 	const int NX = 100; //Number Divisions x-direction
@@ -82,8 +96,12 @@ int main(void)
 		}
 	}
 	
+	*/
+
 
 	/*----- Write legacy .vtk file-------*/
+
+	/*
 	// Create file 
 	FILE* fp = fopen("uniform_2d.vtk", "w"); //open file in write mode
 	if (!fp)
@@ -120,7 +138,7 @@ int main(void)
 		}
 	}
 	
-	/*
+	
 	// Save Momentum Vector Data
 	fprintf(fp, "VECTORS momentum float\n");
 	for (int j = 0; j < NY; j++)
@@ -133,7 +151,7 @@ int main(void)
 			fprintf(fp, "%f %f %f\n", (float)phi[idx_mx], (float)phi[idx_my], 0.0f);
 		}
 	}
-	*/
+	
 
 	fclose(fp);
 
@@ -141,6 +159,174 @@ int main(void)
 	free(phi);
 	free(nodes);
 
+	*/
+
 	printf("To C or not to C: that is the question. \n");
 	return 0;
+	
+}
+
+int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE)
+{
+	// pass pointer as double pointer to allow modification of caller's pointer to nodes and cells arrays
+
+	// Open file for reading
+	FILE* fp = fopen(filename, "r");
+	if (!fp)
+	{
+		perror("Error opening grid file\n");
+		return 1; // Exit with error code
+	}
+
+	// Read number of nodes and cells
+	char line[512]; //Store line from file
+
+	bool points_section = false;
+	bool cells_section = false;
+	bool cell_types_section = false;
+
+	int pidx = 0; // Node index
+	int cidx = 0; // Cell index
+	int ctidx = 0; // Cell type index
+
+	// Create Null Pointers for nodes and cells, will allocate memory after reading number of points and cells
+	node* nodes = NULL;
+	cell* cells = NULL;
+
+	while (fgets(line, sizeof(line), fp))
+	{
+		if (line[0] == '\n' || line[0] == '\r') // Skip empty lines and comments
+			continue;
+
+		// Check for section headers
+		if (sscanf(line, "POINTS %d", NPOINTS) == 1)
+		{
+			points_section = true;
+			cells_section = false;
+			cell_types_section = false;
+
+			// Allocate Nodes memory after reading number of points
+			nodes = malloc((size_t)(*NPOINTS) * sizeof(node));
+			if (nodes == NULL)
+			{
+				fprintf(stderr, "Error: Memory allocation failed for nodes array.\n");
+				fclose(fp);
+				return 2; // Exit with error code
+			}
+
+			pidx = 0; // Reset node index for reading node data
+			continue;
+		}
+
+		if (sscanf(line, "CELLS %d %d", NCELLS, CELL_LIST_SIZE) == 2)
+		{
+			cells_section = true;
+			points_section = false;
+			cell_types_section = false;
+
+			//Allocate Cells memory after reading number of cells
+			cells = malloc((size_t)(*NCELLS) * sizeof(cell));
+			if (cells == NULL)
+			{
+				fprintf(stderr, "Error: Memory allocation failed for cells array.\n");
+				fclose(fp);
+				return 2; // Exit with error code
+			}
+
+			cidx = 0; // Reset cell index for reading cell data
+			continue;
+		}
+
+		if (sscanf(line, "CELL_TYPES %d", NCELLS) == 1)
+		{
+			cell_types_section = true;
+			points_section = false;
+			cells_section = false;
+
+			ctidx = 0; // Reset cell type index for reading cell type data
+			continue;
+		}
+
+
+		// Read node data, cell data, or cell type data based on the current section
+		if (points_section)
+		{
+			double x, y, z;
+			if (sscanf(line, "%lf %lf %lf", &x, &y, &z) == 3)
+			{
+				nodes[pidx].x = x;
+				nodes[pidx].y = y;
+				nodes[pidx].z = z;
+
+				nodes[pidx].id = pidx;
+
+				pidx++;
+				continue;
+			}
+			else
+			{
+				fprintf(stderr, "Error reading node data\n");
+				return 1;
+			}
+		}
+		else if (cells_section)
+		{
+			int num_nodes;
+			int node_ids[8]; // Assuming max 8 nodes per cell
+			for (int i = 0; i < 8; i++)
+			{
+				cells[cidx].node_ids[i] = -1; // Initialize node IDs to -1
+			}
+
+			if (sscanf(line, "%d %d %d %d %d %d %d %d %d", &num_nodes, &node_ids[0], &node_ids[1], &node_ids[2], &node_ids[3], &node_ids[4], &node_ids[5], &node_ids[6], &node_ids[7]) >= 2)
+			{
+
+				// Store node IDs for the cell
+				cells[cidx].num_nodes = num_nodes; // Store number of nodes in the cell
+				for (int i = 0; i < num_nodes; i++)
+				{
+					cells[cidx].node_ids[i] = node_ids[i];
+
+				}
+				// Store cell ID
+				cells[cidx].id = cidx;
+
+				cidx++;
+			}
+			else
+			{
+				fprintf(stderr, "Error reading cell data\n");
+				return 1;
+			}
+		}
+		else if (cell_types_section)
+		{
+			int cell_type;
+			if (sscanf(line, "%d", &cell_type) == 1)
+			{
+				cells[ctidx].type = cell_type;
+			}
+			else
+			{
+				fprintf(stderr, "Error reading cell type data\n");
+				return 1;
+			}
+
+			ctidx++;
+		}
+	}
+
+	// close file
+	fclose(fp);
+
+	//Release memory on error 
+	if (nodes && pidx != *NPOINTS) { free(nodes); free(cells); return 11; }
+	if (cells && cidx != *NCELLS) { free(nodes); free(cells); return 12; }
+
+	// Set output pointers
+	*nodes_out = nodes;
+	*cells_out = cells;
+
+	return 0; // Success
+
 }
