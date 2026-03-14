@@ -7,49 +7,28 @@
 
 /* Indexing macros (row major)*/
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
-#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
+//#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
+
+#define IDX(i,eq,NCELLS) ( (i) + (eq*NCELLS) )
 
 int main(void)
 {		
+	// Load grid
 	node* nodes;
 	cell* cells; 
 
 	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0;
 
-	int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
-
-	free(nodes);
-	free(cells);
-
+	//Home PC
+	int err = read_grid("C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
 	
+	//Lab PC
+	//int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
 
-	/*
-	// Create Read grid function to read the points and then create arrays 
-	// Grid Setup
-	const int NX = 100; //Number Divisions x-direction
-	const int NY = 100; //Number divisions y-direction
-	const int NZ = 1;   //Number divisions z-direction 
+	int NEQNS = 3; // Number of transport equations solved
 
-	//Domain setup
-	const double x0 = 0.0, y0 = 0.0, z0 = 0.0; // Origin Location
-	const double x1 = 1.0, y1 = 1.0, z1 = 1.0; // Domain side lengths
-
-	//Grid Spacing (only 2D array for now)
-	const double dx = (x1 - x0) / NX; // Grid spacing x-direciton
-	const double dy = (y1 - y0) / NY; // Grid spacing y-direction
-	const double dz = (z1 - z0) / NZ; // Grid spacing z-direction
-
-	const int NCELLS = NX * NY * NZ;
-	const int NPOINTS = (NX + 1) * (NY + 1) * (NZ + 1);
-
-	// Allocate Arrays
-	const int NEQNS = 1; // Number of equations solved
-
-	// Conservative variable fields [rho, rho*u, rho*v]
-	double* phi = malloc((NCELLS * NEQNS)* sizeof(double)); // Solution variable
-
-	
-	// Check for correct memory allocation
+	// Allocate conservative scalars
+	double* phi = malloc((NEQNS * NCELLS) * sizeof(double));
 	if (phi == NULL)
 	{
 		// Print error message to stderr stream and exit
@@ -57,109 +36,29 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
-	// Nodes array
-	node* nodes = malloc(NPOINTS * sizeof(node)); // Node coordinates array
-
-	if (nodes == NULL)
+	// initialize phi[eq=0] to 1 everywhere and 0 for other equations
+	memset(phi, 0, (NEQNS * NCELLS) * sizeof(double));
+	for (int i = 0; i < NCELLS; i++)
 	{
-		fprintf(stderr, "Error: Memory allocation failed for nodes array.\n");
-		return 1; // Exit with error code
+		phi[IDX(i, 0, NCELLS)] = 1;
 	}
 
-	// Calculate Node Coordinates
-	for (int i = 0; i < NPOINTS; i++)
-	{
-
-	}
-	// Loop over grid and initialize conservative ariables
-	for (int eq = 0; eq < NEQNS; eq++) //loop over conservative fields
-	{
-		for (int j = 0; j < NY; j++) // loop over y
-		{
-			for (int i = 0; i < NX; i++) //loop over x
-			{
-				//Global index
-				int idx = IDX(i, j, eq, NX, NY);
-
-				// Cell Centroid coordinates
-				double x = x0 + dx / 2 + i * dx; //x cell centroid points
-				double y = y0 + dy / 2 + j * dy; //y cell centroid points 
-				
-				// Allocate Fields
-				if (eq == 0) { phi[idx] = 1; } else //Density
-				if (eq == 1) { phi[idx] = 0; } else //x-momentum
-				if (eq == 2) { phi[idx] = 0; } else //y-momentum
-				{ phi[idx] = 0; }                   //other unspecified 
 
 
-			}
-		}
-	}
-	
-	*/
+
+	// ------ Write output file --------
+	err = write_vtk_output("output_file.vtk", &nodes, &cells, &NPOINTS, &NCELLS,
+		&CELL_LIST_SIZE, &phi);
 
 
-	/*----- Write legacy .vtk file-------*/
-
-	/*
-	// Create file 
-	FILE* fp = fopen("uniform_2d.vtk", "w"); //open file in write mode
-	if (!fp)
-	{
-		perror("Error writing data file\n");
-		return 1;
-	}
-
-	// Header section
-	fprintf(fp, "# vtk DataFile Version 3.0\n");
-	fprintf(fp, "Jack's first vtk datafile\n");
-	fprintf(fp, "ASCII\n");
-
-	// Data definition
-	fprintf(fp, "DATASET STRUCTURED_POINTS\n");
-
-	// Geometry
-	fprintf(fp,"DIMENSIONS %d %d %d\n", NX+1, NY+1, NZ+1); //Number of grid points (not cells)
-	fprintf(fp,"ORIGIN %f %f %f\n", x0, y0, z0); 
-	fprintf(fp,"SPACING %f %f %f\n", dx, dy, dz);
-
-	// Data
-	fprintf(fp, "CELL_DATA %d\n", NCELLS);
-	fprintf(fp, "SCALARS phi(0) float 1\n");
-	fprintf(fp, "LOOKUP_TABLE default\n");
-
-	// Save Density Scalar Data
-	for (int j = 0; j < NY; j++)
-	{
-		for (int i = 0; i < NX; i++)
-		{
-			int idx = IDX(i, j, 0, NX, NY);
-			fprintf(fp, "%f\n", (float)phi[idx]);
-		}
-	}
-	
-	
-	// Save Momentum Vector Data
-	fprintf(fp, "VECTORS momentum float\n");
-	for (int j = 0; j < NY; j++)
-	{
-		for (int i = 0; i < NX; i++)
-		{
-			int idx_mx = IDX(i, j, NX, NY, 1);
-			int idx_my = IDX(i, j, NX, NY, 2);
-
-			fprintf(fp, "%f %f %f\n", (float)phi[idx_mx], (float)phi[idx_my], 0.0f);
-		}
-	}
-	
-
-	fclose(fp);
-
-	// Free Memory
-	free(phi);
+	// Release Allocated Memory for grid
 	free(nodes);
+	free(cells);
 
-	*/
+	// Release conservative scalars memory
+	free(phi);
+
+	
 
 	printf("To C or not to C: that is the question. \n");
 	return 0;
@@ -329,4 +228,82 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 
 	return 0; // Success
 
+}
+
+/*---------------------------------------------------------------------------
+* Write data function
+----------------------------------------------------------------------------*/
+int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
+	int* NPOINTS,	int* NCELLS,	int* CELL_LIST_SIZE,	double** phi)
+{
+	//Open file for writing
+	FILE* fp = fopen(out_filename, "w");
+
+	if (!fp)
+	{
+		perror("Error writing data file\n");
+		return 1;
+	}
+
+	// Header section
+	fprintf(fp, "# vtk DataFile Version 3.0\n");
+	fprintf(fp, "Jack's first unstructured vtk datafile\n");
+	fprintf(fp, "ASCII\n");
+
+	// Dataset type definition
+	fprintf(fp, "DATASET UNSTRUCTURED_GRID\n");
+
+	// Write points
+	fprintf(fp, "POINTS %d double\n", *NPOINTS);
+	
+	for (int i = 0; i < *NPOINTS; i++) 
+	{
+		fprintf(fp, "%.15f %.15f %.15f\n", (*nodes)[i].x, (*nodes)[i].y, (*nodes)[i].z);
+	}
+
+	// Write Cells
+	fprintf(fp, "CELLS %d %d\n", *NCELLS, *CELL_LIST_SIZE);
+	
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		// Get number of nodes for current cell
+		int num_nodes = (*cells)[i].num_nodes;
+		fprintf(fp, "%d ", num_nodes);
+
+		for (int point = 0; point < num_nodes; point++)
+		{
+			if (point == (num_nodes - 1))
+			{
+				fprintf(fp, "%d\n", (*cells)[i].node_ids[point]);
+			}
+			else
+			{
+				fprintf(fp, "%d ", (*cells)[i].node_ids[point]);
+			}
+			
+		}
+	}
+
+	// Write Cell Types
+	fprintf(fp, "CELL_TYPES %d \n", *NCELLS);
+
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%d\n", (*cells)[i].type);
+	}
+
+	// Write Scalar data 
+	fprintf(fp, "CELL_DATA %d\n", *NCELLS);
+
+	fprintf(fp, "SCALARS phi[%d] double 1\n",0);
+	fprintf(fp, "LOOKUP_TABLE default\n");
+
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%.15f\n", (*phi)[IDX(i, 0, *NCELLS)]);
+	}
+
+	fclose(fp);
+
+	return 0;
 }
