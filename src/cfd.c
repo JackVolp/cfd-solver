@@ -21,11 +21,16 @@ int main(void)
 
 	//Home PC
 	int err = read_grid("C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
-	
+	if (err != 0)
+	{
+		fprintf(stderr, "read_grid failed with error code %d\n", err);
+		return 1;
+	}
+
 	//Lab PC
 	//int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
 
-	int NEQNS = 3; // Number of transport equations solved
+	int NEQNS = 1; // Number of transport equations solved
 
 	// Allocate conservative scalars
 	double* phi = malloc((NEQNS * NCELLS) * sizeof(double));
@@ -43,17 +48,20 @@ int main(void)
 		phi[IDX(i, 0, NCELLS)] = 1;
 	}
 
-
+	// Apply Boundary conditions
 
 
 	// ------ Write output file --------
 	err = write_vtk_output("output_file.vtk", &nodes, &cells, &NPOINTS, &NCELLS,
 		&CELL_LIST_SIZE, &phi);
-
+	if (err != 0)
+	{
+		fprintf(stderr, "write_vtk_output failed with error code %d\n", err);
+		return 1;
+	}
 
 	// Release Allocated Memory for grid
-	free(nodes);
-	free(cells);
+	free_grid(nodes, cells, NCELLS);
 
 	// Release conservative scalars memory
 	free(phi);
@@ -65,6 +73,52 @@ int main(void)
 	
 }
 
+int get_num_faces(int vtk_type)
+{
+	switch (vtk_type)
+	{
+	//Degenerate Cells 
+	case VTK_EMPTY_CELL:
+	case VTK_VERTEX:
+	case VTK_POLY_VERTEX:
+	case VTK_LINE:
+	case VTK_POLY_LINE:
+		return 0;
+	
+	// 2D Cells 
+	case VTK_TRIANGLE: 
+		return 3;
+
+	case VTK_PIXEL:
+		return 4;
+
+	case VTK_QUAD:
+		return 4;
+
+	// 3D Cells
+
+	case VTK_TETRA:
+		return 4;
+	case VTK_VOXEL:
+		return 6;
+	case VTK_HEXAHEDRON:
+		return 6;
+	case VTK_WEDGE:
+		return 5;
+	case VTK_PYRAMID:
+		return 5;
+	case VTK_PENTAGONAL_PRISM:
+		return 7;
+	case VTK_HEXAGONAL_PRISM:
+		return 8;
+
+	default:
+		fprintf(stderr, "Unsupported VTK cell type %d\n",vtk_type);
+		exit(1);
+	}
+}
+
+// Read grid .vtk file
 int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE)
 {
 	// pass pointer as double pointer to allow modification of caller's pointer to nodes and cells arrays
@@ -91,6 +145,7 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	// Create Null Pointers for nodes and cells, will allocate memory after reading number of points and cells
 	node* nodes = NULL;
 	cell* cells = NULL;
+
 
 	while (fgets(line, sizeof(line), fp))
 	{
@@ -130,6 +185,10 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 				fprintf(stderr, "Error: Memory allocation failed for cells array.\n");
 				fclose(fp);
 				return 2; // Exit with error code
+			}
+			for (int i = 0; i < *NCELLS; i++)
+			{
+				cells[i].node_ids = NULL; // Initialize pointer to zero
 			}
 
 			cidx = 0; // Reset cell index for reading cell data
@@ -172,24 +231,32 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 		{
 			int num_nodes;
 			int node_ids[8]; // Assuming max 8 nodes per cell
+
+			/*
 			for (int i = 0; i < 8; i++)
 			{
 				cells[cidx].node_ids[i] = -1; // Initialize node IDs to -1
-			}
+			}*/
 
 			if (sscanf(line, "%d %d %d %d %d %d %d %d %d", &num_nodes, &node_ids[0], &node_ids[1], &node_ids[2], &node_ids[3], &node_ids[4], &node_ids[5], &node_ids[6], &node_ids[7]) >= 2)
 			{
 
 				// Store node IDs for the cell
 				cells[cidx].num_nodes = num_nodes; // Store number of nodes in the cell
+
+				// allocate node_ids 
+				cells[cidx].node_ids = malloc(num_nodes * sizeof(int));
+
 				for (int i = 0; i < num_nodes; i++)
 				{
 					cells[cidx].node_ids[i] = node_ids[i];
 
 				}
+
 				// Store cell ID
 				cells[cidx].id = cidx;
 
+				// Calculate centroid, Cell Volume, Fill out face information also
 				cidx++;
 			}
 			else
@@ -219,8 +286,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	fclose(fp);
 
 	//Release memory on error 
-	if (nodes && pidx != *NPOINTS) { free(nodes); free(cells); return 11; }
-	if (cells && cidx != *NCELLS) { free(nodes); free(cells); return 12; }
+	if (nodes && pidx != *NPOINTS) { free_grid(nodes, cells, cidx); return 11; }
+	if (cells && cidx != *NCELLS) { free_grid(nodes, cells, cidx); return 12; }
 
 	// Set output pointers
 	*nodes_out = nodes;
@@ -230,8 +297,22 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 
 }
 
+void free_grid(node* nodes, cell* cells, int ncells_allocated)
+{
+	free(nodes);
+
+	if (cells)
+	{
+		for (int i = 0; i < ncells_allocated; ++i)
+		{
+			free(cells[i].node_ids);
+		}
+		free(cells);
+	}
+}
+
 /*---------------------------------------------------------------------------
-* Write data function
+* Write data function and grid 
 ----------------------------------------------------------------------------*/
 int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
 	int* NPOINTS,	int* NCELLS,	int* CELL_LIST_SIZE,	double** phi)
@@ -295,12 +376,32 @@ int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
 	// Write Scalar data 
 	fprintf(fp, "CELL_DATA %d\n", *NCELLS);
 
+	// Write cell id
+	fprintf(fp, "SCALARS cellId int 1\n");
+	fprintf(fp, "LOOKUP_TABLE default\n");
+
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%d\n", (*cells)[i].id);
+	}
+	// Write phi
 	fprintf(fp, "SCALARS phi[%d] double 1\n",0);
 	fprintf(fp, "LOOKUP_TABLE default\n");
 
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%.15f\n", (*phi)[IDX(i, 0, *NCELLS)]);
+	}
+
+	// Write Node data
+	fprintf(fp, "POINT_DATA %d\n", *NPOINTS);
+	// Write node id
+	fprintf(fp, "SCALARS nodeId int 1\n");
+	fprintf(fp, "LOOKUP_TABLE default\n");
+
+	for (int i = 0; i < *NPOINTS; i++)
+	{
+		fprintf(fp, "%d\n", (*nodes)[i].id);
 	}
 
 	fclose(fp);
