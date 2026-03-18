@@ -4,4 +4,4 @@ set(CMAKE_C_STANDARD 99)
 
 add_executable(cfd
   "src/cfd.c"
-)
+ "src/grid.c" "src/grid.h")

@@ -21,14 +21,15 @@ int main(void)
 
 	//Home PC
 	int err = read_grid("C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
+	//Lab PC
+	//int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
 	if (err != 0)
 	{
 		fprintf(stderr, "read_grid failed with error code %d\n", err);
 		return 1;
 	}
 
-	//Lab PC
-	//int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
+	
 
 	int NEQNS = 1; // Number of transport equations solved
 
@@ -48,8 +49,57 @@ int main(void)
 		phi[IDX(i, 0, NCELLS)] = 1;
 	}
 
+	/* Iteration loop
+	* //Calculate gradient at faces
+	*	loop over interior faces
+	*		find flux at each face
+	*		add flux to gradient of owner cell and subtract flux from gradient of neighbor cell
+	*	
+	*	loop over boundary faces
+	*		find flux at each face
+	*		add flux to gradient of owner cell
+	* 
+	*	loop over cells
+	*		divide gradient by volume of cell to get final gradient value
+	* 
+	* //Construct Matrix
+	*	initialize aC and aF as zeros for all cells
+	*	initialize b as Qc*Vc for all cells
+	*	
+	*	loop over all internal faces
+	*		af(owner) +=  -gamma(face)*Ef(face)/dCF
+	*		ac(owner) +=  gamma(face)*Ef(face)/dCF
+	* 
+	*		af(neighbor) +=  gamma(face)*Ef(face)/dCF
+	*		ac(neighbor) +=  -gamma(face)*Ef(face)/dCF
+	* 
+	*		interpolate gradient to face
+	*		
+	*		b(owner) += gamma(face)*grad(face) dot Tf(face)
+	*		b(neighbor) += gamma(face)*grad(face) dot -Tf(face)
+	* 
+	*	loop over all boundary faces
+	* 
+	*		switch (boundary condition type)
+	*		case Dirichlet: 
+	*			dirichelet coefficents pg 252
+	*		case Neumann:
+	*			neumann coefficients pg 221
+	*		case Robin:
+	*			robin/mixed coefficients pg 253-254
+
 	// Apply Boundary conditions
 
+	// Calculate gradient 
+	// loop over interior faces
+	//	find flux at faces 
+	//	add flux to owner cell and subtract flux from neighbor cell
+	//	loop over boundary faces
+	//  calculate boundary flux at faces and add to owner cell 
+	//	loop over all elemetns and divide gardient by voume of element
+	// 
+	//  
+	*/
 
 	// ------ Write output file --------
 	err = write_vtk_output("output_file.vtk", &nodes, &cells, &NPOINTS, &NCELLS,

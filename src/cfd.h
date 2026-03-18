@@ -50,6 +50,7 @@ typedef struct face {
 	double xc, yc, zc; //face centroid
 	double sx, sy, sz; //Face area vector
 }face;
+
 int read_grid(const char* filename,
 	node** nodes_out,
 	cell** cells_out,
