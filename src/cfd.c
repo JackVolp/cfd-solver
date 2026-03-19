@@ -33,7 +33,8 @@ int main(void)
 		return 1;
 	}
 
-	
+	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
+	err = calculate_cell_centroid_and_volume(nodes, cells, &NCELLS);
 
 	int NEQNS = 1; // Number of transport equations solved
 

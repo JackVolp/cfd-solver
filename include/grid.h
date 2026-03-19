@@ -70,6 +70,10 @@ void free_grid(node* nodes,
 
 int get_num_faces(int vtk_type);
 
-int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int ncells);
+int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS);
+
+void magnitude(double* v, double* result);
+
+void cross_prod(double* a, double* b, double* result);
 
 #endif

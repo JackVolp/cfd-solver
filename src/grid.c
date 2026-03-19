@@ -258,6 +258,11 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
 	{
 		cell* c = &cells[i];
 		
+		if (c->type < 5) // If Cell is a no volume cell
+		{
+			c->volume = 0.0;
+			continue;
+		}
 		// Calculate number of faces for given cell
 		c->num_faces = get_num_faces(c->type);
 
@@ -272,21 +277,87 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
 			x_G[2] += nodes[node_id].z;
 		}
 
-		x_G[0] /= c->num_nodes;
-		x_G[1] /= c->num_nodes;
-		x_G[2] /= c->num_nodes;
+		// same as cblas scaling
+		//x_G[0] /= c->num_nodes;
+		//x_G[1] /= c->num_nodes;
+		//x_G[2] /= c->num_nodes;
 		
 		cblas_dscal(3, 1.0 / c->num_nodes, x_G, 1);
-				
+		
 		// Get number of sub angles
-		int num_sub_angles = (c->num_faces)*(c->num_faces - 1)*(c->num_faces - 2)/6;
+		int num_sub_triangles = (c->num_faces)*(c->num_faces - 1)*(c->num_faces - 2)/6;
+
+		// Initialize cell volume and cell centroid coordinates to zero
+		c->volume = 0.0;
+		c->xc = 0.0;
+		c->yc = 0.0;
+		c->zc = 0.0;
 
 		// Calculate total cell volume by summing sub-volumes of tetrahedra formed by cell centroid and each face
+		// Also allocate face information
+		for (int k = 0; k < c->num_faces; k++)
+		{
+			// Get node IDs for the current sub-triangle
+			int node_id1 = c->node_ids[k % c->num_faces];
+			int node_id2 = c->node_ids[(k + 1) % c->num_faces];
 
+			// Get coordinates of the nodes
+			double r1[3] = { nodes[node_id1].x, nodes[node_id1].y, nodes[node_id1].z };
+			double r2[3] = { nodes[node_id2].x, nodes[node_id2].y, nodes[node_id2].z };
+			double r3[3] = { x_G[0], x_G[1], x_G[2] };
+
+			// Calculate geometric center/centroid of subtriangle
+			double x_CE_t = (r1[0] + r2[0] + r3[0]) / 3.0;
+			double y_CE_t = (r1[1] + r2[1] + r3[1]) / 3.0;
+			double z_CE_t = (r1[2] + r2[2] + r3[2]) / 3.0;
+
+
+			// Compute area of subtriangle formed by r1, r2, and r3 using cross product
+			double v1[3];
+			double v2[3];
+
+			cblas_dcopy(3, r2, 1, v1, 1); // v1 = r2
+			cblas_dcopy(3, r3, 1, v2, 1); // v2 = r3
+
+			cblas_daxpy(3, -1.0, r1, 1, v1, 1); // v1 = r2 - r1
+			cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1
+
+			// Calculate volume of the triangle formed by r1, r2, and r3
+			double St[3];
+			cross_prod(v1, v2, St); // Calculate cross product of v1 and v2to get the area vector of the triangle
+
+			cblas_dscal(3, 0.5, St, 1); // Scale the area vector by 0.5 to get the area of the triangle
+			double St_mag;
+			magnitude(St, &St_mag); // Calculate the magnitude of the area vector to get the area of the triangle
+
+			// Add Triangle volume/area to total cell volume
+			c->volume += St_mag;
+
+			// Add sub triangle contrubtion to cell centroid calculation
+			c->xc += x_CE_t * St_mag;
+			c->yc += y_CE_t * St_mag;
+			c->zc += z_CE_t * St_mag;
+		}
 		
-
+		// Divide by total cell volume to get final cell centroid
+		c->xc /= c->volume;
+		c->yc /= c->volume;
+		c->zc /= c->volume;
 
 	}
 
 	return 0;
+}
+
+void magnitude(double* v, double* result)
+{
+	*result = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+void cross_prod(double* a, double* b, double* result)
+{
+	// indexing is equal to a[i] == *(a + i)
+	result[0] = a[1] * b[2] - a[2] * b[1];
+	result[1] = a[2] * b[0] - a[0] * b[2];
+	result[2] = a[0] * b[1] - a[1] * b[0];
 }
