@@ -5,6 +5,8 @@
 #ifndef GRID_H
 #define GRID_H
 
+#include "mkl.h"	
+
 typedef struct node {
 	double x, y, z; // Node coordinates
 	int id; // Node ID
@@ -48,8 +50,8 @@ typedef struct cell {
 typedef struct face {
 	int* node_ids;
 	int num_nodes;
-	int owner;
-	int neighbor;
+	int owner; //owner cell ID
+	int neighbor; //neighbor cell ID (-1 for boundary faces)
 
 	double xc, yc, zc; //face centroid
 	double sx, sy, sz; //Face area vector
@@ -67,5 +69,7 @@ void free_grid(node* nodes,
 	int ncells_allocated);
 
 int get_num_faces(int vtk_type);
+
+int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int ncells);
 
 #endif

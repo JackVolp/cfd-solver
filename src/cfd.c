@@ -8,7 +8,6 @@
 #include "grid.h"
 #include "cfd.h"
 
-
 /* Indexing macros (row major)*/
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
 //#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
@@ -20,6 +19,7 @@ int main(void)
 	// Load grid
 	node* nodes;
 	cell* cells; 
+	face* faces;
 
 	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0;
 

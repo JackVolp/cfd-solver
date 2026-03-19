@@ -190,8 +190,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 				}
 
 				// Store cell ID
-				cells[cidx].id = cidx;
-
+				cells[cidx].id = cidx;							
+								 
 				// Calculate centroid, Cell Volume, Fill out face information also
 				cidx++;
 			}
@@ -245,4 +245,48 @@ void free_grid(node* nodes, cell* cells, int ncells_allocated)
 		}
 		free(cells);
 	}
+}
+
+// Function to calculate cell centroid, volume, face information, and other geometric properties
+int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
+{
+	// Loop over cells
+	//	calculate geometric center of cell using 6.21 
+	//	
+
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		cell* c = &cells[i];
+		
+		// Calculate number of faces for given cell
+		c->num_faces = get_num_faces(c->type);
+
+		// Calculate geometric center
+		double x_G[3] = { 0.0, 0.0, 0.0 };
+
+		for (int j = 0; j < c->num_nodes; j++)
+		{
+			int node_id = c->node_ids[j];
+			x_G[0] += nodes[node_id].x;
+			x_G[1] += nodes[node_id].y;
+			x_G[2] += nodes[node_id].z;
+		}
+
+		x_G[0] /= c->num_nodes;
+		x_G[1] /= c->num_nodes;
+		x_G[2] /= c->num_nodes;
+		
+		cblas_dscal(3, 1.0 / c->num_nodes, x_G, 1);
+				
+		// Get number of sub angles
+		int num_sub_angles = (c->num_faces)*(c->num_faces - 1)*(c->num_faces - 2)/6;
+
+		// Calculate total cell volume by summing sub-volumes of tetrahedra formed by cell centroid and each face
+
+		
+
+
+	}
+
+	return 0;
 }

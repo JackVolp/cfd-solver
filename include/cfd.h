@@ -6,7 +6,6 @@
 #ifndef CFD_H
 #define CFD_H
 
-
 // Output VTK file for visualization in ParaView
 int write_vtk_output(const char* out_filename,
 	node** nodes,
