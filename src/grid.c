@@ -54,8 +54,10 @@ int get_num_faces(int vtk_type)
 	}
 }
 
+
+
 // Read grid .vtk file
-int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE)
+int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, int* MAX_FACES)
 {
 	// pass pointer as double pointer to allow modification of caller's pointer to nodes and cells arrays
 
@@ -82,6 +84,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	node* nodes = NULL;
 	cell* cells = NULL;
 
+	// Initialize MAX_FACES
+	*MAX_FACES = 0;
 
 	while (fgets(line, sizeof(line), fp))
 	{
@@ -124,7 +128,9 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			}
 			for (int i = 0; i < *NCELLS; i++)
 			{
-				cells[i].node_ids = NULL; // Initialize pointer to zero
+				// Initialize pointers to zero
+				cells[i].node_ids = NULL;
+				cells[i].face_ids = NULL;
 			}
 
 			cidx = 0; // Reset cell index for reading cell data
@@ -214,6 +220,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 				return 1;
 			}
 
+			*MAX_FACES += get_num_faces(cell_type);
+
 			ctidx++;
 		}
 	}
@@ -222,8 +230,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	fclose(fp);
 
 	//Release memory on error 
-	if (nodes && pidx != *NPOINTS) { free_grid(nodes, cells, cidx); return 11; }
-	if (cells && cidx != *NCELLS) { free_grid(nodes, cells, cidx); return 12; }
+	if (nodes && pidx != *NPOINTS) { free_grid(nodes, cells, NULL, cidx, 0); return 11; }
+	if (cells && cidx != *NCELLS) { free_grid(nodes, cells, NULL, cidx, 0); return 12; }
 
 	// Set output pointers
 	*nodes_out = nodes;
@@ -233,7 +241,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 
 }
 
-void free_grid(node* nodes, cell* cells, int ncells_allocated)
+// Free Grid related variables from memory function 
+void free_grid(node* nodes, cell* cells, face* faces, int ncells_allocated, int nfaces_allocated)
 {
 	free(nodes);
 
@@ -242,18 +251,48 @@ void free_grid(node* nodes, cell* cells, int ncells_allocated)
 		for (int i = 0; i < ncells_allocated; ++i)
 		{
 			free(cells[i].node_ids);
+			free(cells[i].face_ids);
 		}
 		free(cells);
+	}
+
+	if (faces)
+	{
+		for (int i = 0; i < nfaces_allocated; ++i)
+		{
+			free(faces[i].node_ids);
+		}
+		free(faces);
 	}
 }
 
 // Function to calculate cell centroid, volume, face information, and other geometric properties
-int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
+int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES, int* NFACES, face** faces_out)
 {
 	// Loop over cells
 	//	calculate geometric center of cell using 6.21 
 	//	
 
+	// Allocate faces based on worse case scenario
+	face* faces = malloc((size_t)(*MAX_FACES) * sizeof(face));
+
+	if (faces == NULL)
+	{
+		fprintf(stderr, "Error: memory allocation failed for faces array \n");
+		return 2;
+	}
+
+	// Initialize node_ids pointer to zero for face 
+	for (int i = 0; i < *MAX_FACES; i++)
+	{
+		faces[i].node_ids = NULL;
+	}
+
+	*NFACES = 0; // Initialize number of faces
+	//int mfidx = 0; // Face array index (indexs the max size array)
+	int fidx = 0; // actual face index (actual face id)
+
+	// Loop over all cells
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		cell* c = &cells[i];
@@ -263,8 +302,20 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
 			c->volume = 0.0;
 			continue;
 		}
-		// Calculate number of faces for given cell
+
+		// Calculate number of faces for given cell and allocate face ids
 		c->num_faces = get_num_faces(c->type);
+		c->face_ids = malloc(c->num_faces * sizeof(int));
+		if (c->face_ids == NULL)
+		{
+			fprintf(stderr, "Error allocating face id memory \n");
+			// clean up anything already allocated
+			for (int k = 0; k < i; ++k)
+			{
+				free(cells[k].face_ids);
+			}
+			return 2;
+		}
 
 		// Calculate geometric center
 		double x_G[3] = { 0.0, 0.0, 0.0 };
@@ -293,11 +344,12 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
 		c->yc = 0.0;
 		c->zc = 0.0;
 
-		// Calculate total cell volume by summing sub-volumes of tetrahedra formed by cell centroid and each face
+		// Calculate total cell volume by summing sub-volumes triangles formed by cell centroid and each face
 		// Also allocate face information
 		for (int k = 0; k < c->num_faces; k++)
 		{
-			// Get node IDs for the current sub-triangle
+			/*----------------- Compute Cell Volume and Centroid ----------------------*/
+			// Get node IDs for the current sub-triangle (Also node ids of the first face)
 			int node_id1 = c->node_ids[k % c->num_faces];
 			int node_id2 = c->node_ids[(k + 1) % c->num_faces];
 
@@ -337,7 +389,90 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
 			c->xc += x_CE_t * St_mag;
 			c->yc += y_CE_t * St_mag;
 			c->zc += z_CE_t * St_mag;
-		}
+
+			/*-------------Compute Face Connectivity---------------------*/
+
+			// Get number of face nodes (always 2 for 2d problem)
+			int num_nodes = 2;
+
+			// Calculate number of new faces 
+			int node_ids[2] = {node_id1, node_id2};
+			qsort(node_ids, 2, sizeof(int), comp); //Sort node ids in ascending order
+			
+			// Flags for if face is found
+			bool oldFaceFlag = false;
+			int oldFaceidx = 0;
+
+			// Loop over existing faces to check if this one has been found, is this face already in the list of faces?
+			for (int l = 0; l < fidx; l++)
+			{
+				if ((faces[l].node_ids[0] == node_ids[0])
+					&& (faces[l].node_ids[1] == node_ids[1]))
+				{
+					// Does this face already have an neighbor cell?
+					// current cell is neighbor cell
+					// leave owner cell (should already be defined
+
+					oldFaceFlag = true;
+					oldFaceidx = l;
+					break;		
+				}				
+			}
+
+			// Decide action based on if face is new
+			if (oldFaceFlag)
+			{
+				// Old Face, current cell is neigbor cell (This will not trigger for boundary faces)
+				// Everything else should be allocated on the first pass
+				faces[oldFaceidx].neighbor = c->id;
+				
+				// Add the face id to the cell. old face index is added to the cell
+				c->face_ids[k] = faces[oldFaceidx].id;
+
+				// Reset Flags 
+				oldFaceFlag = false;
+				oldFaceidx = 0;
+			}
+			else
+			{
+				// New Face, current cell is owner
+				// No neighbor yet
+				// ID is the newest face 
+				// Boundary faces will not be seen twice and will have neighbor -1.
+				// 
+				// Allocate node_ids(should only be done for a new face)
+				faces[fidx].num_nodes = num_nodes;
+				faces[fidx].node_ids = malloc(num_nodes * sizeof(int));
+				if (faces[fidx].node_ids == NULL)
+				{
+					fprintf(stderr, "Error allocating node ararys for faces\n");
+
+					for (int alo_fidx = 0; alo_fidx < fidx; alo_fidx++)
+					{
+						free(faces[alo_fidx].node_ids);
+					}
+					free(faces);
+
+					return 2;
+				}
+
+				
+				// Set face data 
+				faces[fidx].node_ids[0] = node_ids[0];
+				faces[fidx].node_ids[1] = node_ids[1];
+
+				faces[fidx].owner = c->id;
+				faces[fidx].neighbor = -1;
+				faces[fidx].id = fidx;
+
+				// Add the face id to the cell. New face index is added to the cell
+				c->face_ids[k] = fidx;
+
+				//increment face counter
+				fidx++;
+
+			}
+		}	
 		
 		// Divide by total cell volume to get final cell centroid
 		c->xc /= c->volume;
@@ -345,9 +480,27 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int *NCELLS)
 		c->zc /= c->volume;
 
 	}
+	
+	// Set the number of faces and face array 
+	*NFACES = fidx;
 
+	// Reallocate faces and assign it to faces_out
+	face* tmp = realloc(faces, (size_t)fidx * sizeof(face));
+	if (tmp != NULL)
+	{
+		faces = tmp;
+	}
+
+	*faces_out = faces; 
 	return 0;
 }
+
+
+// Math Helper functions (maybe move to separate header)
+int comp(const void* a, const void* b) {
+	return (*(int*)a - *(int*)b);
+}
+
 
 void magnitude(double* v, double* result)
 {

@@ -49,6 +49,7 @@ typedef struct cell {
 
 typedef struct face {
 	int* node_ids;
+	int id; 
 	int num_nodes;
 	int owner; //owner cell ID
 	int neighbor; //neighbor cell ID (-1 for boundary faces)
@@ -57,20 +58,30 @@ typedef struct face {
 	double sx, sy, sz; //Face area vector
 }face;
 
-int read_grid(const char* filename,
-	node** nodes_out,
+int read_grid(const char* filename, //grid filename INPUT
+	node** nodes_out, 
 	cell** cells_out,
 	int* NPOINTS,
 	int* NCELLS,
-	int* CELL_LIST_SIZE);
+	int* CELL_LIST_SIZE,
+	int* MAX_FACES);
 
 void free_grid(node* nodes,
 	cell* cells,
-	int ncells_allocated);
+	face* faces,
+	int ncells_allocated,
+	int nfaces_allocated);
 
 int get_num_faces(int vtk_type);
 
-int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS);
+int calculate_cell_centroid_and_volume(node* nodes,
+	cell* cells,
+	int* NCELLS,
+	int* MAX_FACES,
+	int* NFACES, // Number of faces in grid OUTPUT
+	face** faces_out); // Face connectivity OUTPUT
+
+int comp(const void* a, const void* b); //Comparator function for ascending order sorting qsort 
 
 void magnitude(double* v, double* result);
 

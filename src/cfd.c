@@ -21,12 +21,12 @@ int main(void)
 	cell* cells; 
 	face* faces;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES;
 
 	//Home PC
-	//int err = read_grid("C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
+	int err = read_grid("C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES);
 	//Lab PC
-	int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
+	//int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
 	if (err != 0)
 	{
 		fprintf(stderr, "read_grid failed with error code %d\n", err);
@@ -34,7 +34,7 @@ int main(void)
 	}
 
 	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
-	err = calculate_cell_centroid_and_volume(nodes, cells, &NCELLS);
+	err = calculate_cell_centroid_and_volume(nodes, cells, &NCELLS, &MAX_FACES, &NFACES,&faces);
 
 	int NEQNS = 1; // Number of transport equations solved
 
@@ -116,7 +116,7 @@ int main(void)
 	}
 
 	// Release Allocated Memory for grid
-	free_grid(nodes, cells, NCELLS);
+	free_grid(nodes, cells, faces, NCELLS,NFACES);
 
 	// Release conservative scalars memory
 	free(phi);
