@@ -267,7 +267,7 @@ void free_grid(node* nodes, cell* cells, face* faces, int ncells_allocated, int 
 }
 
 // Function to calculate cell centroid, volume, face information, and other geometric properties
-int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES, int* NFACES, face** faces_out)
+int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES, int* NFACES, face** faces_out)
 {
 	// Loop over cells
 	//	calculate geometric center of cell using 6.21 

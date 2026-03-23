@@ -15,5 +15,12 @@ int write_vtk_output(const char* out_filename,
 	int* CELL_LIST_SIZE,
 	double** scalars);
 
+int compute_gradient(node* nodes,
+	cell* cells,
+	face* faces,
+	int* NCELLS,
+	int* NFACES,
+	double* phi,
+	double* grad);
 
 #endif // !

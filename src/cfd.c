@@ -39,7 +39,7 @@ int main(void)
 	}
 
 	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
-	err = calculate_cell_centroid_and_volume(nodes, cells, &NCELLS, &MAX_FACES, &NFACES,&faces);
+	err = build_faces_and_cells(nodes, cells, &NCELLS, &MAX_FACES, &NFACES,&faces);
 
 	int NEQNS = 1; // Number of transport equations solved
 
@@ -229,5 +229,11 @@ int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
 
 	fclose(fp);
 
+	return 0;
+}
+
+int compute_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
+	int* NFACES, double* phi, double* grad)
+{
 	return 0;
 }

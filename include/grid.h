@@ -74,7 +74,7 @@ void free_grid(node* nodes,
 
 int get_num_faces(int vtk_type);
 
-int calculate_cell_centroid_and_volume(node* nodes,
+int build_faces_and_cells(node* nodes,
 	cell* cells,
 	int* NCELLS,
 	int* MAX_FACES,
