@@ -470,14 +470,28 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS, in
 				faces[fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
 				faces[fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
 
-				// Face Surface Vector
-				// let r3 now be zero
-				// y = ax + y 
-				// v3 = r3 - r1 
-				// v3 = -r1 
-				//double v3[3];
+				// Face Surface Vector components
+				double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
+				double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
 
-				cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1
+				// Create tangent surface vector
+				double E[3] = { dx, dy };
+
+				// Rotate the vector 90 degrees to get the normal vector candidate
+				double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
+				
+				// Check if the vector is point in the right direction (out from owner cell)
+				if ( ((faces[fidx].xc - c->xc) * Sf[0] + (faces[fidx].yc - c->yc) * Sf[1]) < 0)
+				{
+					// If the dot product is negative, the face normal is pointing inward, so we need to flip it
+					Sf[0] = -Sf[0];
+					Sf[1] = -Sf[1];
+				}
+				
+				// Assign face vector to faces
+				faces[fidx].sx = Sf[0];
+				faces[fidx].sy = Sf[1];
+				faces[fidx].sz = Sf[2];
 
 				// Add the face id to the cell. New face index is added to the cell
 				c->face_ids[k] = fidx;

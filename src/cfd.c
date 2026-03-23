@@ -15,7 +15,13 @@
 #define IDX(i,eq,NCELLS) ( (i) + (eq*NCELLS) )
 
 int main(void)
-{		
+{	
+	/*----------------------Grid Input Filename------------------*/
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
+	const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
+	/*-----------------------------------------------------------*/
+
+
 	// Load grid
 	node* nodes;
 	cell* cells; 
@@ -23,10 +29,9 @@ int main(void)
 
 	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES;
 
-	//Home PC
-	int err = read_grid("C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES);
-	//Lab PC
-	//int err = read_grid("C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk", &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE);
+	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
+	int err = read_grid(filename, &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES);
+	
 	if (err != 0)
 	{
 		fprintf(stderr, "read_grid failed with error code %d\n", err);
