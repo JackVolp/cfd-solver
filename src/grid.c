@@ -465,6 +465,20 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS, in
 				faces[fidx].neighbor = -1;
 				faces[fidx].id = fidx;
 
+				// Face centroid
+				faces[fidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
+				faces[fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
+				faces[fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
+
+				// Face Surface Vector
+				// let r3 now be zero
+				// y = ax + y 
+				// v3 = r3 - r1 
+				// v3 = -r1 
+				//double v3[3];
+
+				cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1
+
 				// Add the face id to the cell. New face index is added to the cell
 				c->face_ids[k] = fidx;
 
@@ -496,10 +510,14 @@ int calculate_cell_centroid_and_volume(node* nodes, cell* cells, int* NCELLS, in
 }
 
 
-// Math Helper functions (maybe move to separate header)
+// Math Helper functions (maybe move to separate heade
+// Comparison function, must return negative if *a is less than *b
+// 0 if they are equal
+// and positive if *a is greater than *b
 int comp(const void* a, const void* b) {
 	return (*(int*)a - *(int*)b);
 }
+
 
 
 void magnitude(double* v, double* result)
