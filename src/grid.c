@@ -57,7 +57,7 @@ int get_num_faces(int vtk_type)
 
 
 // Read grid .vtk file
-int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, int* MAX_FACES)
+int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, int* MAX_FACES, int* NDEGEN_CELLS)
 {
 	// pass pointer as double pointer to allow modification of caller's pointer to nodes and cells arrays
 
@@ -218,6 +218,11 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			{
 				fprintf(stderr, "Error reading cell type data\n");
 				return 1;
+			}
+
+			if (cell_type < 5) // If Cell is a no volume cell, increment degenerate cell count
+			{
+				(*NDEGEN_CELLS)++;
 			}
 
 			*MAX_FACES += get_num_faces(cell_type);
@@ -531,8 +536,6 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 int comp(const void* a, const void* b) {
 	return (*(int*)a - *(int*)b);
 }
-
-
 
 void magnitude(double* v, double* result)
 {

@@ -15,7 +15,7 @@ int write_vtk_output(const char* out_filename,
 	int* CELL_LIST_SIZE,
 	double** scalars);
 
-int compute_gradient(node* nodes,
+int compute_lsq_gradient(node* nodes,
 	cell* cells,
 	face* faces,
 	int* NCELLS,

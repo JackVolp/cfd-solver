@@ -13,6 +13,7 @@
 //#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
 
 #define IDX(i,eq,NCELLS) ( (i) + (eq*NCELLS) )
+#define vecIDX(i,j,nx) ( (j)*(nx) + (i) ) //indexing for vectors stored in row major format as [x1,x2,...,xn,y1,y2,...yn,z1,z2,...zn]. nx is number of cells in this case
 
 int main(void)
 {	
@@ -27,10 +28,10 @@ int main(void)
 	cell* cells; 
 	face* faces;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0;
 
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
-	int err = read_grid(filename, &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES);
+	int err = read_grid(filename, &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS);
 	
 	if (err != 0)
 	{
@@ -232,8 +233,74 @@ int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
 	return 0;
 }
 
-int compute_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
-	int* NFACES, double* phi, double* grad)
-{
+int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
+	int *NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
+
+{	// Initialize gradient coefficint matrix to zero (See eq. 9.27)
+	// Number of cells w/ volume
+	int NVOL_CELLS = (*NCELLS) - (*NDEGEN_CELLS);
+
+	// A12 and A21 are the same matrix so only need to allocate one of them
+	double* A11 = malloc(NVOL_CELLS * sizeof(double));
+	if (A11 == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for A11 array.\n");
+		return 1;
+	}
+
+	double* A12 = malloc(NVOL_CELLS * sizeof(double));
+	if (A12 == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for A12 array.\n");
+		free(A11); // Free previously allocated A11 before exiting
+		return 1;
+	}
+
+	double* A22 = malloc(NVOL_CELLS * sizeof(double));
+	if (A22 == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for A22 array.\n");
+		free(A11); // Free previously allocated A11 before exiting
+		free(A12); // Free previously allocated A12 before exiting
+		return 1;
+	}
+
+	// Initialize B vector for least squares gradient calculation, size is NCELLS x 2 (x and y components)
+	double* b = malloc(NVOL_CELLS * sizeof(double) * 2);
+	if (b == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for b1 array.\n");
+		free(A11); // Free previously allocated A11 before exiting
+		free(A12); // Free previously allocated A12 before exiting
+		free(A22); // Free previously allocated A22 before exiting
+		return 1;
+	}
+
+
+	// Initialize coefficients to zero
+	memset(A11, 0, NVOL_CELLS * sizeof(double));
+	memset(A12, 0, NVOL_CELLS * sizeof(double));
+	memset(A22, 0, NVOL_CELLS * sizeof(double));
+
+	// Loop over all faces and calculate contributions to gradient coefficient matrices
+	for (int i = 0; i < *NFACES; i++)
+	{
+		face* f = &faces[i];
+		cell* C = &cells[f->owner];
+		cell* F = &cells[f->neighbor];
+
+
+
+
+
+		
+	}
+
+
+	// Free allocated memory for gradient coefficient matrices
+	free(A11);
+	free(A12);
+	free(A22);
+	free(b);
 	return 0;
 }

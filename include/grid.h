@@ -64,7 +64,8 @@ int read_grid(const char* filename, //grid filename INPUT
 	int* NPOINTS,
 	int* NCELLS,
 	int* CELL_LIST_SIZE,
-	int* MAX_FACES);
+	int* MAX_FACES,
+	int* NDEGEN_CELLS);
 
 void free_grid(node* nodes,
 	cell* cells,
