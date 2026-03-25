@@ -7,6 +7,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdbool.h>
+#include "math_helpers.h"
 #include "grid.h"
 
 int get_num_faces(int vtk_type)
@@ -537,15 +538,4 @@ int comp(const void* a, const void* b) {
 	return (*(int*)a - *(int*)b);
 }
 
-void magnitude(double* v, double* result)
-{
-	*result = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-}
 
-void cross_prod(double* a, double* b, double* result)
-{
-	// indexing is equal to a[i] == *(a + i)
-	result[0] = a[1] * b[2] - a[2] * b[1];
-	result[1] = a[2] * b[0] - a[0] * b[2];
-	result[2] = a[0] * b[1] - a[1] * b[0];
-}

@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 // Include grid first to define node,cell, and face types
+#include "math_helpers.h"
 #include "grid.h"
 #include "cfd.h"
 
@@ -286,16 +287,54 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 	for (int i = 0; i < *NFACES; i++)
 	{
 		face* f = &faces[i];
+
+		if (f->neighbor == -1)
+		{
+			// Boundary face, skip for now (will need to apply boundary conditions later)
+			continue;
+		}
+
 		cell* C = &cells[f->owner];
 		cell* F = &cells[f->neighbor];
 
+		//Define rCF 
+		double dxk = f->xc - C->xc;
+		double dyk = f->yc - C->yc;
+		//double dzk = f->zc - C->zc;
 
+		double dphi = phi[IDX(F->id, 0, *NCELLS)] - phi[IDX(C->id, 0, *NCELLS)];
 
+		// Compute Weight
+		double w = 1.0 / sqrt(dxk * dxk + dyk * dyk);
 
+		// Update A11, A12, A22, and b for owner cell
+		A11[C->id] += w * dxk * dxk;
+		A12[C->id] += w * dxk * dyk; // same as A21
+		A22[C->id] += w * dyk * dyk;
 
-		
+		// Update b for owner cell
+		b[vecIDX(C->id, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
+		b[vecIDX(C->id, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
+
+		// Update A11, A12, A22, and b for neighbor cell
+		A11[F->id] += w * dxk * dxk;
+		A12[F->id] += w * dxk * dyk; // same as A21
+		A22[F->id] += w * dyk * dyk;
+
+		// Update b for neighbor cell
+		b[vecIDX(F->id, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
+		b[vecIDX(F->id, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b	
 	}
 
+	// Loop over all cells and solve for gradient
+	for (int i = 0; i < NVOL_CELLS; i++)
+	{
+		int cell_id = i + *NDEGEN_CELLS - 1; // Adjust index to account for degenerate cells at the beginning of the cells array
+
+		solve_2x2_system(A11[i], A12[i], A12[i], A22[i], 
+			b[vecIDX(i,0,NVOL_CELLS)], b[vecIDX(i, 1, NVOL_CELLS)],
+			&grad[])
+	}
 
 	// Free allocated memory for gradient coefficient matrices
 	free(A11);

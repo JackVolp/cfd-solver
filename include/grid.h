@@ -6,6 +6,7 @@
 #define GRID_H
 
 #include "mkl.h"	
+#include "math_helpers.h"
 
 typedef struct node {
 	double x, y, z; // Node coordinates
@@ -84,8 +85,6 @@ int build_faces_and_cells(node* nodes,
 
 int comp(const void* a, const void* b); //Comparator function for ascending order sorting qsort 
 
-void magnitude(double* v, double* result);
 
-void cross_prod(double* a, double* b, double* result);
 
 #endif
