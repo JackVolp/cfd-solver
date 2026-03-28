@@ -5,6 +5,7 @@
 #ifndef GRID_H
 #define GRID_H
 
+#include <stdbool.h>
 #include "mkl.h"	
 #include "math_helpers.h"
 
@@ -53,7 +54,8 @@ typedef struct face {
 	int id; 
 	int num_nodes;
 	int owner; //owner cell ID
-	int neighbor; //neighbor cell ID (-1 for boundary faces)
+	int neighbor; //neighbor cell ID (uses cell id of degenerate face/edge cell for boundary faces)
+	bool boundary_face; //flag to indicate if this is a boundary face
 
 	double xc, yc, zc; //face centroid
 	double sx, sy, sz; //Face area vector
@@ -75,6 +77,12 @@ void free_grid(node* nodes,
 	int nfaces_allocated);
 
 int get_num_faces(int vtk_type);
+
+int calculate_cell_centroid_and_vol(cell* c, node* nodes);
+
+int build_face(cell* c, face* faces, node* nodes, int k, int* fidx);
+
+int build_degen_cell_face(void);
 
 int build_faces_and_cells(node* nodes,
 	cell* cells,

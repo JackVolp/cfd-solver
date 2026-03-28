@@ -331,9 +331,10 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 	{
 		int cell_id = i + *NDEGEN_CELLS - 1; // Adjust index to account for degenerate cells at the beginning of the cells array
 
+		/*
 		solve_2x2_system(A11[i], A12[i], A12[i], A22[i], 
 			b[vecIDX(i,0,NVOL_CELLS)], b[vecIDX(i, 1, NVOL_CELLS)],
-			&grad[])
+			&grad[])*/
 	}
 
 	// Free allocated memory for gradient coefficient matrices

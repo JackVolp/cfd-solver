@@ -323,78 +323,19 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 			return 2;
 		}
 
-		// Calculate geometric center
-		double x_G[3] = { 0.0, 0.0, 0.0 };
-
-		for (int j = 0; j < c->num_nodes; j++)
-		{
-			int node_id = c->node_ids[j];
-			x_G[0] += nodes[node_id].x;
-			x_G[1] += nodes[node_id].y;
-			x_G[2] += nodes[node_id].z;
-		}
-
-		// same as cblas scaling
-		//x_G[0] /= c->num_nodes;
-		//x_G[1] /= c->num_nodes;
-		//x_G[2] /= c->num_nodes;
-		
-		cblas_dscal(3, 1.0 / c->num_nodes, x_G, 1);
-		
-		// Get number of sub angles
-		int num_sub_triangles = (c->num_faces)*(c->num_faces - 1)*(c->num_faces - 2)/6;
-
-		// Initialize cell volume and cell centroid coordinates to zero
-		c->volume = 0.0;
-		c->xc = 0.0;
-		c->yc = 0.0;
-		c->zc = 0.0;
-
 		// Calculate total cell volume by summing sub-volumes triangles formed by cell centroid and each face
 		// Also allocate face information
+
+		/*----------------- Compute Cell Volume and Centroid ----------------------*/
+		int err = calculate_cell_centroid_and_vol(c, nodes);
+
 		for (int k = 0; k < c->num_faces; k++)
 		{
-			/*----------------- Compute Cell Volume and Centroid ----------------------*/
+			
 			// Get node IDs for the current sub-triangle (Also node ids of the first face)
 			int node_id1 = c->node_ids[k % c->num_faces];
 			int node_id2 = c->node_ids[(k + 1) % c->num_faces];
-
-			// Get coordinates of the nodes
-			double r1[3] = { nodes[node_id1].x, nodes[node_id1].y, nodes[node_id1].z };
-			double r2[3] = { nodes[node_id2].x, nodes[node_id2].y, nodes[node_id2].z };
-			double r3[3] = { x_G[0], x_G[1], x_G[2] };
-
-			// Calculate geometric center/centroid of subtriangle
-			double x_CE_t = (r1[0] + r2[0] + r3[0]) / 3.0;
-			double y_CE_t = (r1[1] + r2[1] + r3[1]) / 3.0;
-			double z_CE_t = (r1[2] + r2[2] + r3[2]) / 3.0;
-
-
-			// Compute area of subtriangle formed by r1, r2, and r3 using cross product
-			double v1[3];
-			double v2[3];
-
-			cblas_dcopy(3, r2, 1, v1, 1); // v1 = r2
-			cblas_dcopy(3, r3, 1, v2, 1); // v2 = r3
-
-			cblas_daxpy(3, -1.0, r1, 1, v1, 1); // v1 = r2 - r1
-			cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1
-
-			// Calculate volume of the triangle formed by r1, r2, and r3
-			double St[3];
-			cross_prod(v1, v2, St); // Calculate cross product of v1 and v2to get the area vector of the triangle
-
-			cblas_dscal(3, 0.5, St, 1); // Scale the area vector by 0.5 to get the area of the triangle
-			double St_mag;
-			magnitude(St, &St_mag); // Calculate the magnitude of the area vector to get the area of the triangle
-
-			// Add Triangle volume/area to total cell volume
-			c->volume += St_mag;
-
-			// Add sub triangle contrubtion to cell centroid calculation
-			c->xc += x_CE_t * St_mag;
-			c->yc += y_CE_t * St_mag;
-			c->zc += z_CE_t * St_mag;
+						
 
 			/*-------------Compute Face Connectivity---------------------*/
 
@@ -508,11 +449,6 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 			}
 		}	
 		
-		// Divide by total cell volume to get final cell centroid
-		c->xc /= c->volume;
-		c->yc /= c->volume;
-		c->zc /= c->volume;
-
 	}
 	
 	// Set the number of faces and face array 
@@ -526,6 +462,211 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 	}
 
 	*faces_out = faces; 
+	return 0;
+}
+
+int calculate_cell_centroid_and_vol(cell* c, node* nodes)
+{
+	// Calculate geometric center
+	double x_G[3] = { 0.0, 0.0, 0.0 };
+
+	for (int j = 0; j < c->num_nodes; j++)
+	{
+		int node_id = c->node_ids[j];
+		x_G[0] += nodes[node_id].x;
+		x_G[1] += nodes[node_id].y;
+		x_G[2] += nodes[node_id].z;
+	}
+
+	cblas_dscal(3, 1.0 / c->num_nodes, x_G, 1);
+
+	if (c->type < 5) // If Cell is a degenerate cell, centroid is geometric center and volume is zero
+	{
+		c->volume = 0.0;
+		c->xc = x_G[0];
+		c->yc = x_G[1];
+		c->zc = x_G[2];
+
+		return 0; //Function ends here for degenerate cells
+	} 
+
+	// Initialize cell volume and cell centroid coordinates to zero
+		c->volume = 0.0;
+		c->xc = 0.0;
+		c->yc = 0.0;
+		c->zc = 0.0;
+
+	for (int k = 0; k < c->num_faces; k++)
+	{
+		/*----------------- Compute Cell Volume and Centroid ----------------------*/
+		// Get node IDs for the current sub-triangle (Also node ids of the first face)
+		int node_id1 = c->node_ids[k % c->num_faces];
+		int node_id2 = c->node_ids[(k + 1) % c->num_faces];
+
+		// Get coordinates of the nodes
+		double r1[3] = { nodes[node_id1].x, nodes[node_id1].y, nodes[node_id1].z };
+		double r2[3] = { nodes[node_id2].x, nodes[node_id2].y, nodes[node_id2].z };
+		double r3[3] = { x_G[0], x_G[1], x_G[2] };
+
+		// Calculate geometric center/centroid of subtriangle
+		double x_CE_t = (r1[0] + r2[0] + r3[0]) / 3.0;
+		double y_CE_t = (r1[1] + r2[1] + r3[1]) / 3.0;
+		double z_CE_t = (r1[2] + r2[2] + r3[2]) / 3.0;
+
+
+		// Compute area of subtriangle formed by r1, r2, and r3 using cross product
+		double v1[3];
+		double v2[3];
+
+		cblas_dcopy(3, r2, 1, v1, 1); // v1 = r2
+		cblas_dcopy(3, r3, 1, v2, 1); // v2 = r3
+
+		cblas_daxpy(3, -1.0, r1, 1, v1, 1); // v1 = r2 - r1
+		cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1
+
+		// Calculate volume of the triangle formed by r1, r2, and r3
+		double St[3];
+		cross_prod(v1, v2, St); // Calculate cross product of v1 and v2to get the area vector of the triangle
+
+		cblas_dscal(3, 0.5, St, 1); // Scale the area vector by 0.5 to get the area of the triangle
+		double St_mag;
+		magnitude(St, &St_mag); // Calculate the magnitude of the area vector to get the area of the triangle
+
+		// Add Triangle volume/area to total cell volume
+		c->volume += St_mag;
+
+		// Add sub triangle contrubtion to cell centroid calculation
+		c->xc += x_CE_t * St_mag;
+		c->yc += y_CE_t * St_mag;
+		c->zc += z_CE_t * St_mag;
+	}
+
+	// Divide by total cell volume to get final cell centroid
+	c->xc /= c->volume;
+	c->yc /= c->volume;
+	c->zc /= c->volume;
+
+	return 0;
+}
+
+int build_degen_cell_face(void)
+{
+	return 0;
+}
+
+int build_face(cell* c, face* faces, node* nodes, int k, int* fidx)
+{
+	// Get number of face nodes (always 2 for 2d problem)
+	int num_nodes = 2;
+
+	// Calculate number of new faces 
+	// Get node IDs for the current sub-triangle (Also node ids of the first face)
+	int node_id1 = c->node_ids[k % c->num_faces];
+	int node_id2 = c->node_ids[(k + 1) % c->num_faces];
+	int node_ids[2] = { node_id1, node_id2 };
+	qsort(node_ids, 2, sizeof(int), comp); //Sort node ids in ascending order
+
+	// Flags for if face is found
+	bool oldFaceFlag = false;
+	int oldFaceidx = 0;
+
+	// Loop over existing faces to check if this one has been found, is this face already in the list of faces?
+	for (int l = 0; l < *fidx; l++)
+	{
+		if ((faces[l].node_ids[0] == node_ids[0])
+			&& (faces[l].node_ids[1] == node_ids[1]))
+		{
+			// Does this face already have an neighbor cell?
+			// current cell is neighbor cell
+			// leave owner cell (should already be defined
+
+			oldFaceFlag = true;
+			oldFaceidx = l;
+			break;
+		}
+	}
+
+	// Decide action based on if face is new
+	if (oldFaceFlag)
+	{
+		// Old Face, current cell is neigbor cell (This will not trigger for boundary faces)
+		// Everything else should be allocated on the first pass
+		faces[oldFaceidx].neighbor = c->id;
+
+		// Add the face id to the cell. old face index is added to the cell
+		c->face_ids[k] = faces[oldFaceidx].id;
+
+		// Reset Flags 
+		oldFaceFlag = false;
+		oldFaceidx = 0;
+	}
+	else
+	{
+		// New Face, current cell is owner
+		// No neighbor yet
+		// ID is the newest face 
+		// Boundary faces will not be seen twice and will have neighbor -1.
+		// 
+		// Allocate node_ids(should only be done for a new face)
+		faces[*fidx].num_nodes = num_nodes;
+		faces[*fidx].node_ids = malloc(num_nodes * sizeof(int));
+		if (faces[*fidx].node_ids == NULL)
+		{
+			fprintf(stderr, "Error allocating node ararys for faces\n");
+
+			for (int alo_fidx = 0; alo_fidx < *fidx; alo_fidx++)
+			{
+				free(faces[alo_fidx].node_ids);
+			}
+			//free(faces); Should free faces in caller
+
+			return 2;
+		}
+
+
+		// Set face data 
+		faces[*fidx].node_ids[0] = node_ids[0];
+		faces[*fidx].node_ids[1] = node_ids[1];
+
+		faces[*fidx].owner = c->id;
+		faces[*fidx].neighbor = -1;
+		faces[*fidx].id = *fidx;
+
+		// Face centroid
+		faces[*fidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
+		faces[*fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
+		faces[*fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
+
+		// Face Surface Vector components
+		double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
+		double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
+
+		// Create tangent surface vector
+		double E[3] = { dx, dy };
+
+		// Rotate the vector 90 degrees to get the normal vector candidate
+		double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
+
+		// Check if the vector is point in the right direction (out from owner cell)
+		if (((faces[*fidx].xc - c->xc) * Sf[0] + (faces[*fidx].yc - c->yc) * Sf[1]) < 0)
+		{
+			// If the dot product is negative, the face normal is pointing inward, so we need to flip it
+			Sf[0] = -Sf[0];
+			Sf[1] = -Sf[1];
+		}
+
+		// Assign face vector to faces
+		faces[*fidx].sx = Sf[0];
+		faces[*fidx].sy = Sf[1];
+		faces[*fidx].sz = Sf[2];
+
+		// Add the face id to the cell. New face index is added to the cell
+		c->face_ids[k] = *fidx;
+
+		//increment face counter
+		(*fidx)++;
+
+	}
 	return 0;
 }
 
