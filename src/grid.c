@@ -331,122 +331,15 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 
 		for (int k = 0; k < c->num_faces; k++)
 		{
-			
-			// Get node IDs for the current sub-triangle (Also node ids of the first face)
-			int node_id1 = c->node_ids[k % c->num_faces];
-			int node_id2 = c->node_ids[(k + 1) % c->num_faces];
-						
-
 			/*-------------Compute Face Connectivity---------------------*/
-
-			// Get number of face nodes (always 2 for 2d problem)
-			int num_nodes = 2;
-
-			// Calculate number of new faces 
-			int node_ids[2] = {node_id1, node_id2};
-			qsort(node_ids, 2, sizeof(int), comp); //Sort node ids in ascending order
-			
-			// Flags for if face is found
-			bool oldFaceFlag = false;
-			int oldFaceidx = 0;
-
-			// Loop over existing faces to check if this one has been found, is this face already in the list of faces?
-			for (int l = 0; l < fidx; l++)
+			err = build_interior_face(c, faces, nodes, k, &fidx);
+			if (err != 0)
 			{
-				if ((faces[l].node_ids[0] == node_ids[0])
-					&& (faces[l].node_ids[1] == node_ids[1]))
-				{
-					// Does this face already have an neighbor cell?
-					// current cell is neighbor cell
-					// leave owner cell (should already be defined
+				free(faces);
+				fprintf(stderr, "Error building faces \n");
+				return 2;
 
-					oldFaceFlag = true;
-					oldFaceidx = l;
-					break;		
-				}				
-			}
-
-			// Decide action based on if face is new
-			if (oldFaceFlag)
-			{
-				// Old Face, current cell is neigbor cell (This will not trigger for boundary faces)
-				// Everything else should be allocated on the first pass
-				faces[oldFaceidx].neighbor = c->id;
-				
-				// Add the face id to the cell. old face index is added to the cell
-				c->face_ids[k] = faces[oldFaceidx].id;
-
-				// Reset Flags 
-				oldFaceFlag = false;
-				oldFaceidx = 0;
-			}
-			else
-			{
-				// New Face, current cell is owner
-				// No neighbor yet
-				// ID is the newest face 
-				// Boundary faces will not be seen twice and will have neighbor -1.
-				// 
-				// Allocate node_ids(should only be done for a new face)
-				faces[fidx].num_nodes = num_nodes;
-				faces[fidx].node_ids = malloc(num_nodes * sizeof(int));
-				if (faces[fidx].node_ids == NULL)
-				{
-					fprintf(stderr, "Error allocating node ararys for faces\n");
-
-					for (int alo_fidx = 0; alo_fidx < fidx; alo_fidx++)
-					{
-						free(faces[alo_fidx].node_ids);
-					}
-					free(faces);
-
-					return 2;
-				}
-
-				
-				// Set face data 
-				faces[fidx].node_ids[0] = node_ids[0];
-				faces[fidx].node_ids[1] = node_ids[1];
-
-				faces[fidx].owner = c->id;
-				faces[fidx].neighbor = -1;
-				faces[fidx].id = fidx;
-
-				// Face centroid
-				faces[fidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
-				faces[fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
-				faces[fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
-
-				// Face Surface Vector components
-				double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
-				double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
-
-				// Create tangent surface vector
-				double E[3] = { dx, dy };
-
-				// Rotate the vector 90 degrees to get the normal vector candidate
-				double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
-				
-				// Check if the vector is point in the right direction (out from owner cell)
-				if ( ((faces[fidx].xc - c->xc) * Sf[0] + (faces[fidx].yc - c->yc) * Sf[1]) < 0)
-				{
-					// If the dot product is negative, the face normal is pointing inward, so we need to flip it
-					Sf[0] = -Sf[0];
-					Sf[1] = -Sf[1];
-				}
-				
-				// Assign face vector to faces
-				faces[fidx].sx = Sf[0];
-				faces[fidx].sy = Sf[1];
-				faces[fidx].sz = Sf[2];
-
-				// Add the face id to the cell. New face index is added to the cell
-				c->face_ids[k] = fidx;
-
-				//increment face counter
-				fidx++;
-
-			}
+			}		
 		}	
 		
 	}
@@ -549,12 +442,19 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 	return 0;
 }
 
-int build_degen_cell_face(void)
+int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx)
 {
+	
 	return 0;
 }
+// Make a build face function that checks if the cell is degenerate or not, then 
+// do build_boundary face if degenerate which computes the surface vector and 
+// assigns the degenrate cell as the neighbor cell. This will only work for 
+// degenerate cells with > 2 nodes. Will not work for vertex like cells 
+// if its a normal cell, use build boundary face
 
-int build_face(cell* c, face* faces, node* nodes, int k, int* fidx)
+
+int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 {
 	// Get number of face nodes (always 2 for 2d problem)
 	int num_nodes = 2;

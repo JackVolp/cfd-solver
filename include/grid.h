@@ -80,9 +80,10 @@ int get_num_faces(int vtk_type);
 
 int calculate_cell_centroid_and_vol(cell* c, node* nodes);
 
-int build_face(cell* c, face* faces, node* nodes, int k, int* fidx);
+int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx);
 
-int build_degen_cell_face(void);
+int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx);
+
 
 int build_faces_and_cells(node* nodes,
 	cell* cells,
