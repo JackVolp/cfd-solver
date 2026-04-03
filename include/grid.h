@@ -84,6 +84,7 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx);
 
 int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx);
 
+int build_face(cell* c, face* faces, node* nodes, int k, int* fidx);
 
 int build_faces_and_cells(node* nodes,
 	cell* cells,

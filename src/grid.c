@@ -18,9 +18,10 @@ int get_num_faces(int vtk_type)
 	case VTK_EMPTY_CELL:
 	case VTK_VERTEX:
 	case VTK_POLY_VERTEX:
+		return 0;
 	case VTK_LINE:
 	case VTK_POLY_LINE:
-		return 0;
+		return 1;
 
 		// 2D Cells 
 	case VTK_TRIANGLE:
@@ -303,11 +304,13 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 	{
 		cell* c = &cells[i];
 		
+		// Check for degenerate cell
+		/*
 		if (c->type < 5) // If Cell is a no volume cell
 		{
 			c->volume = 0.0;
 			continue;
-		}
+		}*/
 
 		// Calculate number of faces for given cell and allocate face ids
 		c->num_faces = get_num_faces(c->type);
@@ -332,7 +335,8 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 		for (int k = 0; k < c->num_faces; k++)
 		{
 			/*-------------Compute Face Connectivity---------------------*/
-			err = build_interior_face(c, faces, nodes, k, &fidx);
+			//err = build_interior_face(c, faces, nodes, k, &fidx);
+			err = build_face(c, faces, nodes, k, &fidx);
 			if (err != 0)
 			{
 				free(faces);
@@ -442,16 +446,38 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 	return 0;
 }
 
+int build_face(cell* c, face* faces, node* nodes, int k, int* fidx)
+{
+	if (c->type < 5) //Check for degenerate cell
+	{
+		return build_boundary_face(c, faces, nodes, k, fidx); // Build boundary face for degenerate cell
+	}
+	else
+	{
+		return build_interior_face(c, faces, nodes, k, fidx); // Build interior face for normal cell
+	}
+}
+
 int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx)
 {
-	
+	if (c->type < 2) // Check for single node degenerate cell (corner)
+	{
+		return 0; // Do not build face for vertex like degenerate cells
+	}
+
+	// Otherwise, its a line degenerate cell. Assign the cell id as the neighbor cell of the face
+	faces[*fidx].neighbor = c->id;
+
+	// All other properties will be assigned in build_interior_face when the face is first created, since the face will only be seen once for boundary faces and will be created as a new face with the current cell as the owner. This will only work for degenerate cells with > 2 nodes. Will not work for vertex like cells
+	// Vertex cells get -1 as the neighbor
+
 	return 0;
 }
 // Make a build face function that checks if the cell is degenerate or not, then 
 // do build_boundary face if degenerate which computes the surface vector and 
 // assigns the degenrate cell as the neighbor cell. This will only work for 
 // degenerate cells with > 2 nodes. Will not work for vertex like cells 
-// if its a normal cell, use build boundary face
+// if its a normal cell, use build interior face
 
 
 int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
@@ -477,6 +503,7 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 			&& (faces[l].node_ids[1] == node_ids[1]))
 		{
 			// Does this face already have an neighbor cell?
+			// Are the nodes of this face the same as the nodes of the current face (regardless of order)? If so, then this is not a new face, and the current cell is the neighbor cell of this face. This will not trigger for boundary faces since they will only be seen once and will have neighbor -1.
 			// current cell is neighbor cell
 			// leave owner cell (should already be defined
 
@@ -529,7 +556,15 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 		faces[*fidx].node_ids[1] = node_ids[1];
 
 		faces[*fidx].owner = c->id;
-		faces[*fidx].neighbor = -1;
+
+		// Only make neighbor -1 if the neighbor id has not been already set. 
+		// A face on a degenerate cell will already be seen in build_boundary_face, 
+		// but the neighbor will be assigned to the degenerate cell id, so we do not want to overwrite that with -1.
+		if (!faces[*fidx].neighbor)
+		{
+			faces[*fidx].neighbor = -1;
+		}
+		
 		faces[*fidx].id = *fidx;
 
 		// Face centroid
