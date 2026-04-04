@@ -343,7 +343,8 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 				fprintf(stderr, "Error building faces \n");
 				return 2;
 
-			}		
+			}	
+
 		}	
 		
 	}
@@ -448,6 +449,9 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 
 int build_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 {
+
+	faces[*fidx].boundary_face = false; // Initialize boundary face flag to false, will be set to true for boundary faces in build_boundary_face
+
 	if (c->type < 5) //Check for degenerate cell
 	{
 		return build_boundary_face(c, faces, nodes, k, fidx); // Build boundary face for degenerate cell
@@ -465,8 +469,40 @@ int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx)
 		return 0; // Do not build face for vertex like degenerate cells
 	}
 
+	// Get number of face nodes (always 2 for 2d problem)
+	int num_nodes = 2;
+
 	// Otherwise, its a line degenerate cell. Assign the cell id as the neighbor cell of the face
 	faces[*fidx].neighbor = c->id;
+	int node_id1 = c->node_ids[0];
+	int node_id2 = c->node_ids[1];
+	int node_ids[2] = { node_id1, node_id2 };
+	qsort(node_ids, 2, sizeof(int), comp); //Sort node ids in ascending order
+
+	faces[*fidx].num_nodes = num_nodes;
+	faces[*fidx].node_ids = malloc(num_nodes * sizeof(int));
+	if (faces[*fidx].node_ids == NULL)
+	{
+		fprintf(stderr, "Error allocating node ararys for faces\n");
+
+		for (int alo_fidx = 0; alo_fidx < *fidx; alo_fidx++)
+		{
+			free(faces[alo_fidx].node_ids);
+		}
+		//free(faces); Should free faces in caller
+
+		return 2;
+	}
+
+	// Set face data 
+	faces[*fidx].node_ids[0] = node_ids[0];
+	faces[*fidx].node_ids[1] = node_ids[1];
+
+	faces[*fidx].boundary_face = true;
+	faces[*fidx].id = *fidx;
+	c->face_ids[k] = *fidx; // add face to cell
+
+	(*fidx)++; // Increment face index for next face
 
 	// All other properties will be assigned in build_interior_face when the face is first created, since the face will only be seen once for boundary faces and will be created as a new face with the current cell as the owner. This will only work for degenerate cells with > 2 nodes. Will not work for vertex like cells
 	// Vertex cells get -1 as the neighbor
@@ -518,7 +554,45 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 	{
 		// Old Face, current cell is neigbor cell (This will not trigger for boundary faces)
 		// Everything else should be allocated on the first pass
-		faces[oldFaceidx].neighbor = c->id;
+		
+		if (faces[oldFaceidx].boundary_face) // If it is a boundary face, it will have been seen as a degenerate cell. Assign the owner cell as the non-degnerate cell and compute its face area vector
+		{
+			faces[oldFaceidx].owner = c->id;
+
+			calculate_FC_AV(&faces[oldFaceidx], c, nodes, node_ids);
+
+			//// Face centroid
+			//faces[oldFaceidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
+			//faces[oldFaceidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
+			//faces[oldFaceidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
+
+			//// Face Surface Vector components
+			//double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
+			//double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
+
+			//// Create tangent surface vector
+			//double E[3] = { dx, dy };
+
+			//// Rotate the vector 90 degrees to get the normal vector candidate
+			//double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
+
+			//// Check if the vector is point in the right direction (out from owner cell)
+			//if (((faces[oldFaceidx].xc - c->xc) * Sf[0] + (faces[oldFaceidx].yc - c->yc) * Sf[1]) < 0)
+			//{
+			//	// If the dot product is negative, the face normal is pointing inward, so we need to flip it
+			//	Sf[0] = -Sf[0];
+			//	Sf[1] = -Sf[1];
+			//}
+
+			//// Assign face vector to faces
+			//faces[oldFaceidx].sx = Sf[0];
+			//faces[oldFaceidx].sy = Sf[1];
+			//faces[oldFaceidx].sz = Sf[2];
+		}
+		else
+		{
+			faces[oldFaceidx].neighbor = c->id;
+		}
 
 		// Add the face id to the cell. old face index is added to the cell
 		c->face_ids[k] = faces[oldFaceidx].id;
@@ -605,6 +679,129 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 	return 0;
 }
 
+int calculate_FC_AV(face* f, cell* c, node* nodes, int* node_ids)
+{
+	// Face centroid
+	f->xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
+	f->yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
+	f->zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
+
+	// Face Surface Vector components
+	double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
+	double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
+
+	// Create tangent surface vector
+	double E[3] = { dx, dy };
+
+	// Rotate the vector 90 degrees to get the normal vector candidate
+	double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
+
+	// Check if the vector is point in the right direction (out from owner cell)
+	if (((f->xc - c->xc) * Sf[0] + (f->yc - c->yc) * Sf[1]) < 0)
+	{
+		// If the dot product is negative, the face normal is pointing inward, so we need to flip it
+		Sf[0] = -Sf[0];
+		Sf[1] = -Sf[1];
+	}
+
+	// Assign face vector to faces
+	f->sx = Sf[0];
+	f->sy = Sf[1];
+	f->sz = Sf[2];
+
+	return 0;
+}
+
+int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node* nodes, face* faces, int* NFACES)
+{
+
+	int initial_capacity = 10; // Initial capacity for face_ids array
+
+	b->id = id;
+	b->endpoints[0] = endpoints[0];
+	b->endpoints[1] = endpoints[1];
+	b->type = type;
+
+	// initialize face ids
+	b->face_ids = NULL;
+	b->face_ids = malloc(initial_capacity * sizeof(int)); // Will realloc later based on number of faces found
+	b->num_faces = 0; 
+
+	// Boundary line
+	double x0 = nodes[endpoints[0]].x;
+	double x1 = nodes[endpoints[1]].x;
+
+	double y0 = nodes[endpoints[0]].y;
+	double y1 = nodes[endpoints[1]].y;
+
+
+	if (x0 == x1) // Vertical Line
+	{
+		// Loop over faces and find faces that have x coordinate between x0 and x1 and y coordinate between y0 and y1
+		for (int i = 0; i < *NFACES; i++)
+		{
+			if (faces[i].xc >= x0 - 1e-6 && faces[i].xc <= x0 + 1e-6)
+			{
+				// Check if we need to realloc face_ids array
+				if (b->num_faces >= initial_capacity)
+				{
+					initial_capacity *= 2;
+					int* tmp = realloc(b->face_ids, initial_capacity * sizeof(int));
+					if (tmp == NULL)
+					{
+						fprintf(stderr, "Error reallocating memory for boundary face ids\n");
+						free(b->face_ids);
+						return 2;
+					}
+					b->face_ids = tmp;
+				}
+				b->face_ids[b->num_faces] = faces[i].id;
+				b->num_faces++;
+			}
+		}
+
+	}
+	else if (y0 == y1) // Horizontal Line
+	{
+		// Loop over faces and find faces that have x coordinate between x0 and x1 and y coordinate between y0 and y1
+		for (int i = 0; i < *NFACES; i++)
+		{
+			if (faces[i].yc >= x0 - 1e-6 && faces[i].yc <= x0 + 1e-6)
+			{
+				// Check if we need to realloc face_ids array
+				if (b->num_faces >= initial_capacity)
+				{
+					initial_capacity *= 2;
+					int* tmp = realloc(b->face_ids, initial_capacity * sizeof(int));
+					if (tmp == NULL)
+					{
+						fprintf(stderr, "Error reallocating memory for boundary face ids\n");
+						free(b->face_ids);
+						return 2;
+					}
+					b->face_ids = tmp;
+				}
+				b->face_ids[b->num_faces] = faces[i].id;
+				b->num_faces++;
+			}
+		}
+	}
+	else
+	{
+		fprintf(stderr, "Error: Boundary line is not vertical or horizontal\n");
+		return 1;
+	}
+
+	// Realloc face_ids array to the correct size based on the number of faces found
+	b->face_ids = realloc(b->face_ids, b->num_faces * sizeof(int));
+	if ( b->face_ids == NULL)
+	{
+		fprintf(stderr, "Error reallocating memory for boundary face ids\n");
+		free(b->face_ids);
+		return 2;
+	}
+	return 0;
+}
 
 // Math Helper functions (maybe move to separate heade
 // Comparison function, must return negative if *a is less than *b

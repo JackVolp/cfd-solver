@@ -9,11 +9,13 @@
 #include "mkl.h"	
 #include "math_helpers.h"
 
-typedef struct node {
-	double x, y, z; // Node coordinates
-	int id; // Node ID
-} node;
 
+// Boundary Types
+typedef enum boundaryType{
+	Dirichlet = 0,
+	Neumann = 1,
+	Robin = 2,
+}boundaryType;
 
 // Cell Types
 enum {
@@ -36,6 +38,20 @@ enum {
 	VTK_PENTAGONAL_PRISM = 15,
 	VTK_HEXAGONAL_PRISM = 16,
 };
+
+typedef struct boundary {
+	int id; // Surface ID
+	int endpoints[2]; // Endpoints of the surface (if applicable)
+	int num_faces; // Number of faces in the surface
+	int* face_ids; // Array of face IDs that define the surface
+	boundaryType type; // Boundary condition type (Dirichlet, Neumann, Robin)
+} boundary;
+
+
+typedef struct node {
+	double x, y, z; // Node coordinates
+	int id; // Node ID
+} node;
 
 typedef struct cell {
 	int* node_ids; // IDs of the 8 nodes that form the cell
@@ -86,12 +102,17 @@ int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx);
 
 int build_face(cell* c, face* faces, node* nodes, int k, int* fidx);
 
+int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node* nodes, face* faces, int* NFACES);
+
 int build_faces_and_cells(node* nodes,
 	cell* cells,
 	int* NCELLS,
 	int* MAX_FACES,
 	int* NFACES, // Number of faces in grid OUTPUT
 	face** faces_out); // Face connectivity OUTPUT
+
+// Calculate Face Centroid and Area Vector 
+int calculate_FC_AV(face* f, cell* c, node* nodes, int* node_ids);
 
 int comp(const void* a, const void* b); //Comparator function for ascending order sorting qsort 
 

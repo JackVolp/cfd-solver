@@ -29,7 +29,8 @@ int main(void)
 	cell* cells; 
 	face* faces;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4;
+
 
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
 	int err = read_grid(filename, &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS);
@@ -60,6 +61,20 @@ int main(void)
 	{
 		phi[IDX(i, 0, NCELLS)] = 1;
 	}
+
+	// Initialize boundaries (change to allocate for more complex gemoetry)
+	boundary boundaries[4]; // boundaries
+	boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
+
+	for (int i = 0; i < NBOUNDARIES; i++)
+	{
+		int endpoints[2];
+		endpoints[0] = i;
+		endpoints[1] = i+1 % (NBOUNDARIES); 
+		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i], nodes, faces, &NFACES);
+	}
+	
+
 
 	/* Iteration loop
 	* //Calculate gradient at faces
