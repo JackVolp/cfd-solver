@@ -14,4 +14,5 @@ void solve_2x2_system(double A11,
 	double* x1,
 	double* x2);
 
+
 #endif // !MATH_HELPERS_H

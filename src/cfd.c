@@ -8,6 +8,8 @@
 #include "math_helpers.h"
 #include "grid.h"
 #include "cfd.h"
+#include "constants.h"
+#include "math_helpers.h"
 
 /* Indexing macros (row major)*/
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
@@ -19,8 +21,8 @@
 int main(void)
 {	
 	/*----------------------Grid Input Filename------------------*/
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
-	const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
+	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
+	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
 	/*-----------------------------------------------------------*/
 
 
@@ -40,6 +42,9 @@ int main(void)
 		fprintf(stderr, "read_grid failed with error code %d\n", err);
 		return 1;
 	}
+
+	/* Constants for solving*/
+	double gamma = 1; // Diffusivity
 
 	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
 	err = build_faces_and_cells(nodes, cells, &NCELLS, &MAX_FACES, &NFACES,&faces);
@@ -74,7 +79,7 @@ int main(void)
 		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i], nodes, faces, &NFACES);
 	}
 	
-
+	
 
 	/* Iteration loop
 	* //Calculate gradient at faces
@@ -357,5 +362,58 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 	free(A12);
 	free(A22);
 	free(b);
+	return 0;
+}
+
+int initBoundary(boundary* b, double phi_b, double q_b, double h_infty, cell* cells, face* faces, double* phi)
+{
+
+	// Loop over all faces in boundary and apply boundary conditions
+
+	for (int i = 0; i < b->num_faces; i++)
+	{
+		int face_id = b->face_ids[i];
+		face* f = &faces[face_id];
+		cell* c_owner = &cells[f->owner];
+
+		// Should always be a boundary face but just to be sure
+		int phi_face_idx = f->boundary_face ? f->owner : f->neighbor; // If boundary face, use owner cell for phi index, otherwise use neighbor cell (should not trigger for internal faces)
+
+		int phi_owner_idx = f->owner; // Index for owner cell in phi array
+
+		switch (b->type)
+		{
+		case Dirichlet: 
+			// For Dirichlet, we can set the boundary value directly
+			phi[phi_face_idx] = phi_b; // Set phi at owner cell to boundary value
+		case Neumann: {
+			// magnitude of surface area vector
+			double S[3] = { f->Sx, f->Sy, f->Sz }; // Surface area vector of face
+			double S_mag = 0;
+			magnitude(S, &S_mag);
+
+			// Distance from owner cell centroid to face centroid
+			// Always positive since face vector always points outward from owner cell
+			double rCF[3] = { f->xc - c_owner->xc, f->yc - c_owner->yc, f->zc - c_owner->zc }; // vector from cell centroid to face centroid
+
+			double d_CF = 0;
+			magnitude(rCF, &d_CF);
+
+			double gDiff = S_mag / d_CF; // "Geometric Diffusion Coefficient"
+
+			phi[phi_face_idx] = (GAMMA * gDiff * phi[phi_owner_idx] - q_b) / (GAMMA * gDiff); // Eq 8.42 from textbook
+		}
+		case Robin: {
+			// For Robin, we need to calculate the equivalent boundary value based on the given phi_b, q_b, and h_infty
+			
+		}
+			
+		default:
+			fprintf(stderr, "Error: Unknown boundary condition type for boundary ID %d\n", b->id);
+			return 1;
+		}
+	}
+
+	
 	return 0;
 }

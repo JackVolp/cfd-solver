@@ -336,7 +336,7 @@ int build_faces_and_cells(node* nodes, cell* cells, int* NCELLS, int* MAX_FACES,
 		{
 			/*-------------Compute Face Connectivity---------------------*/
 			//err = build_interior_face(c, faces, nodes, k, &fidx);
-			err = build_face(c, faces, nodes, k, &fidx);
+			err = build_face(c, faces, nodes, cells, k, &fidx);
 			if (err != 0)
 			{
 				free(faces);
@@ -447,22 +447,22 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 	return 0;
 }
 
-int build_face(cell* c, face* faces, node* nodes, int k, int* fidx)
+int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 {
 
 	faces[*fidx].boundary_face = false; // Initialize boundary face flag to false, will be set to true for boundary faces in build_boundary_face
 
 	if (c->type < 5) //Check for degenerate cell
 	{
-		return build_boundary_face(c, faces, nodes, k, fidx); // Build boundary face for degenerate cell
+		return build_boundary_face(c, faces, nodes, cells, k, fidx); // Build boundary face for degenerate cell
 	}
 	else
 	{
-		return build_interior_face(c, faces, nodes, k, fidx); // Build interior face for normal cell
+		return build_interior_face(c, faces, nodes, cells,  k, fidx); // Build interior face for normal cell
 	}
 }
 
-int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx)
+int build_boundary_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 {
 	if (c->type < 2) // Check for single node degenerate cell (corner)
 	{
@@ -516,7 +516,7 @@ int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx)
 // if its a normal cell, use build interior face
 
 
-int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
+int build_interior_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 {
 	// Get number of face nodes (always 2 for 2d problem)
 	int num_nodes = 2;
@@ -559,39 +559,15 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 		{
 			faces[oldFaceidx].owner = c->id;
 
-			calculate_FC_AV(&faces[oldFaceidx], c, nodes, node_ids);
-
-			//// Face centroid
-			//faces[oldFaceidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
-			//faces[oldFaceidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
-			//faces[oldFaceidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
-
-			//// Face Surface Vector components
-			//double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
-			//double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
-
-			//// Create tangent surface vector
-			//double E[3] = { dx, dy };
-
-			//// Rotate the vector 90 degrees to get the normal vector candidate
-			//double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
-
-			//// Check if the vector is point in the right direction (out from owner cell)
-			//if (((faces[oldFaceidx].xc - c->xc) * Sf[0] + (faces[oldFaceidx].yc - c->yc) * Sf[1]) < 0)
-			//{
-			//	// If the dot product is negative, the face normal is pointing inward, so we need to flip it
-			//	Sf[0] = -Sf[0];
-			//	Sf[1] = -Sf[1];
-			//}
-
-			//// Assign face vector to faces
-			//faces[oldFaceidx].sx = Sf[0];
-			//faces[oldFaceidx].sy = Sf[1];
-			//faces[oldFaceidx].sz = Sf[2];
+			cell* c_neighbor = &cells[faces[oldFaceidx].neighbor]; // Get the neighbor cell (which is the degenerate cell that was used to build the boundary face)
+			calculate_FC_AV(&faces[oldFaceidx], c, c_neighbor, nodes, node_ids);
 		}
 		else
 		{
 			faces[oldFaceidx].neighbor = c->id;
+
+			cell* c_owner = &cells[faces[oldFaceidx].owner]; // Get the owner cell (which is the first cell that was used to build the face)
+			calculate_FC_AV(&faces[oldFaceidx], c_owner, c, nodes, node_ids);
 		}
 
 		// Add the face id to the cell. old face index is added to the cell
@@ -624,7 +600,6 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 			return 2;
 		}
 
-
 		// Set face data 
 		faces[*fidx].node_ids[0] = node_ids[0];
 		faces[*fidx].node_ids[1] = node_ids[1];
@@ -641,36 +616,37 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 		
 		faces[*fidx].id = *fidx;
 
-		// Face centroid
-		faces[*fidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
-		faces[*fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
-		faces[*fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
 
-		// Face Surface Vector components
-		double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
-		double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
+		//// Face centroid
+		//faces[*fidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
+		//faces[*fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
+		//faces[*fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
 
-		// Create tangent surface vector
-		double E[3] = { dx, dy };
+		//// Face Surface Vector components
+		//double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
+		//double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
 
-		// Rotate the vector 90 degrees to get the normal vector candidate
-		double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
+		//// Create tangent surface vector
+		//double E[3] = { dx, dy };
 
-		// Check if the vector is point in the right direction (out from owner cell)
-		if (((faces[*fidx].xc - c->xc) * Sf[0] + (faces[*fidx].yc - c->yc) * Sf[1]) < 0)
-		{
-			// If the dot product is negative, the face normal is pointing inward, so we need to flip it
-			Sf[0] = -Sf[0];
-			Sf[1] = -Sf[1];
-		}
+		//// Rotate the vector 90 degrees to get the normal vector candidate
+		//double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
 
-		// Assign face vector to faces
-		faces[*fidx].sx = Sf[0];
-		faces[*fidx].sy = Sf[1];
-		faces[*fidx].sz = Sf[2];
+		//// Check if the vector is point in the right direction (out from owner cell)
+		//if (((faces[*fidx].xc - c->xc) * Sf[0] + (faces[*fidx].yc - c->yc) * Sf[1]) < 0)
+		//{
+		//	// If the dot product is negative, the face normal is pointing inward, so we need to flip it
+		//	Sf[0] = -Sf[0];
+		//	Sf[1] = -Sf[1];
+		//}
 
-		// Add the face id to the cell. New face index is added to the cell
-		c->face_ids[k] = *fidx;
+		//// Assign face vector to faces
+		//faces[*fidx].sx = Sf[0];
+		//faces[*fidx].sy = Sf[1];
+		//faces[*fidx].sz = Sf[2];
+
+		//// Add the face id to the cell. New face index is added to the cell
+		//c->face_ids[k] = *fidx;
 
 		//increment face counter
 		(*fidx)++;
@@ -679,7 +655,7 @@ int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx)
 	return 0;
 }
 
-int calculate_FC_AV(face* f, cell* c, node* nodes, int* node_ids)
+int calculate_FC_AV(face* f, cell* c_owner, cell* c_neighbor, node* nodes, int* node_ids)
 {
 	// Face centroid
 	f->xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
@@ -691,13 +667,13 @@ int calculate_FC_AV(face* f, cell* c, node* nodes, int* node_ids)
 	double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
 
 	// Create tangent surface vector
-	double E[3] = { dx, dy };
+	double T[3] = { dx, dy };
 
 	// Rotate the vector 90 degrees to get the normal vector candidate
 	double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
 
 	// Check if the vector is point in the right direction (out from owner cell)
-	if (((f->xc - c->xc) * Sf[0] + (f->yc - c->yc) * Sf[1]) < 0)
+	if (((f->xc - c_owner->xc) * Sf[0] + (f->yc - c_owner->yc) * Sf[1]) < 0)
 	{
 		// If the dot product is negative, the face normal is pointing inward, so we need to flip it
 		Sf[0] = -Sf[0];
@@ -705,9 +681,33 @@ int calculate_FC_AV(face* f, cell* c, node* nodes, int* node_ids)
 	}
 
 	// Assign face vector to faces
-	f->sx = Sf[0];
-	f->sy = Sf[1];
-	f->sz = Sf[2];
+	f->Sx = Sf[0];
+	f->Sy = Sf[1];
+	f->Sz = Sf[2];
+
+	double Sf_mag = 0;
+	magnitude(Sf, &Sf_mag);
+
+	//Use Orthogonal Correction Approach
+	double n_hat[3] = { f->Sx/Sf_mag, f->Sy/Sf_mag, f->Sz/Sf_mag }; // face unit normal vector
+
+	// Build e vector
+	// Calculate vector from owner cell centroid to neighbor cell centroid
+	double r_ON[3] = { c_neighbor->xc - c_owner->xc, c_neighbor->yc - c_owner->yc, c_neighbor->zc - c_owner->zc };
+
+	double r_ON_mag;
+	magnitude(r_ON, &r_ON_mag);
+	double e[3] = { r_ON[0] / r_ON_mag, r_ON[1] / r_ON_mag, r_ON[2] / r_ON_mag };
+
+	// Orthogonal contribution vector (use orthogonal correction approach)
+	f->Ex = Sf_mag*e[0];
+	f->Ey = Sf_mag*e[1];
+	f->Ez = Sf_mag*e[2];
+
+	// Cross Diffusion contribution vector (use normal correction) eq 8.71
+	f->Tx = Sf[0] - f->Ex;
+	f->Ty = Sf[1] - f->Ey;
+	f->Tz = Sf[2] - f->Ez;
 
 	return 0;
 }

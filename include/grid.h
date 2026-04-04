@@ -74,7 +74,9 @@ typedef struct face {
 	bool boundary_face; //flag to indicate if this is a boundary face
 
 	double xc, yc, zc; //face centroid
-	double sx, sy, sz; //Face area vector
+	double Sx, Sy, Sz; //Face area vector
+	double Ex, Ey, Ez; // orthogonal contribution
+	double Tx, Ty, Tz; // tangential contribution
 }face;
 
 int read_grid(const char* filename, //grid filename INPUT
@@ -96,11 +98,11 @@ int get_num_faces(int vtk_type);
 
 int calculate_cell_centroid_and_vol(cell* c, node* nodes);
 
-int build_interior_face(cell* c, face* faces, node* nodes, int k, int* fidx);
+int build_interior_face(cell* c, face* faces, node* nodes,cell* cells, int k, int* fidx);
 
-int build_boundary_face(cell* c, face* faces, node* node, int k, int* fidx);
+int build_boundary_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx);
 
-int build_face(cell* c, face* faces, node* nodes, int k, int* fidx);
+int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx);
 
 int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node* nodes, face* faces, int* NFACES);
 
@@ -112,7 +114,7 @@ int build_faces_and_cells(node* nodes,
 	face** faces_out); // Face connectivity OUTPUT
 
 // Calculate Face Centroid and Area Vector 
-int calculate_FC_AV(face* f, cell* c, node* nodes, int* node_ids);
+int calculate_FC_AV(face* f, cell* c_owner, cell* c_neighbor, node* nodes, int* node_ids);
 
 int comp(const void* a, const void* b); //Comparator function for ascending order sorting qsort 
 
