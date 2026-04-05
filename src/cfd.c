@@ -91,7 +91,7 @@ int main(void)
 	{
 		int endpoints[2];
 		endpoints[0] = i;
-		endpoints[1] = i+1 % (NBOUNDARIES); 
+		endpoints[1] = (i+1) % (NBOUNDARIES); 
 		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i],p1_boundary_data[i], nodes, faces, &NFACES);
 	}
 	
@@ -172,7 +172,7 @@ int main(void)
 
 	// ------ Write output file --------
 	err = write_vtk_output("output_file.vtk", &nodes, &cells, &NPOINTS, &NCELLS,
-		&CELL_LIST_SIZE, &phi);
+		&CELL_LIST_SIZE, &phi, &grad);
 	if (err != 0)
 	{
 		fprintf(stderr, "write_vtk_output failed with error code %d\n", err);
@@ -197,10 +197,10 @@ int main(void)
 /*---------------------------------------------------------------------------
 * Write data function and grid 
 ----------------------------------------------------------------------------*/
-int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
-	int* NPOINTS,	int* NCELLS,	int* CELL_LIST_SIZE,	double** phi)
+int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
+	int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, double** phi, double** grad)
 {
-	//Open file for writing
+	// Open file for writing
 	FILE* fp = fopen(out_filename, "w");
 
 	if (!fp)
@@ -219,24 +219,22 @@ int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
 
 	// Write points
 	fprintf(fp, "POINTS %d double\n", *NPOINTS);
-	
-	for (int i = 0; i < *NPOINTS; i++) 
+	for (int i = 0; i < *NPOINTS; i++)
 	{
-		fprintf(fp, "%.15f %.15f %.15f\n", (*nodes)[i].x, (*nodes)[i].y, (*nodes)[i].z);
+		fprintf(fp, "%.15f %.15f %.15f\n",
+			(*nodes)[i].x, (*nodes)[i].y, (*nodes)[i].z);
 	}
 
-	// Write Cells
+	// Write cells
 	fprintf(fp, "CELLS %d %d\n", *NCELLS, *CELL_LIST_SIZE);
-	
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		// Get number of nodes for current cell
 		int num_nodes = (*cells)[i].num_nodes;
 		fprintf(fp, "%d ", num_nodes);
 
 		for (int point = 0; point < num_nodes; point++)
 		{
-			if (point == (num_nodes - 1))
+			if (point == num_nodes - 1)
 			{
 				fprintf(fp, "%d\n", (*cells)[i].node_ids[point]);
 			}
@@ -244,51 +242,63 @@ int write_vtk_output(const char* out_filename,	node** nodes,	cell** cells,
 			{
 				fprintf(fp, "%d ", (*cells)[i].node_ids[point]);
 			}
-			
 		}
 	}
 
-	// Write Cell Types
-	fprintf(fp, "CELL_TYPES %d \n", *NCELLS);
-
+	// Write cell types
+	fprintf(fp, "CELL_TYPES %d\n", *NCELLS);
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%d\n", (*cells)[i].type);
 	}
 
-	// Write Scalar data 
+	// Write cell data for ALL cells, including degenerate cells
 	fprintf(fp, "CELL_DATA %d\n", *NCELLS);
 
-	// Write cell id
+	// Cell IDs
 	fprintf(fp, "SCALARS cellId int 1\n");
 	fprintf(fp, "LOOKUP_TABLE default\n");
-
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%d\n", (*cells)[i].id);
 	}
-	// Write phi
-	fprintf(fp, "SCALARS phi[%d] double 1\n",0);
-	fprintf(fp, "LOOKUP_TABLE default\n");
 
+	// Phi
+	fprintf(fp, "SCALARS phi[%d] double 1\n", 0);
+	fprintf(fp, "LOOKUP_TABLE default\n");
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%.15f\n", (*phi)[IDX(i, 0, *NCELLS)]);
 	}
 
-	// Write Node data
+	// Gradient vector
+	fprintf(fp, "VECTORS grad_phi double\n");
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%.15f %.15f %.15f\n",
+			(*grad)[vecIDX(i, 0, *NCELLS)],
+			(*grad)[vecIDX(i, 1, *NCELLS)],
+			(*grad)[vecIDX(i, 2, *NCELLS)]);
+	}
+
+	// Optional: mark degenerate cells explicitly
+	fprintf(fp, "SCALARS isDegenerate int 1\n");
+	fprintf(fp, "LOOKUP_TABLE default\n");
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%d\n", ((*cells)[i].volume <= 0.0) ? 1 : 0);
+	}
+
+	// Point data
 	fprintf(fp, "POINT_DATA %d\n", *NPOINTS);
-	// Write node id
 	fprintf(fp, "SCALARS nodeId int 1\n");
 	fprintf(fp, "LOOKUP_TABLE default\n");
-
 	for (int i = 0; i < *NPOINTS; i++)
 	{
 		fprintf(fp, "%d\n", (*nodes)[i].id);
 	}
 
 	fclose(fp);
-
 	return 0;
 }
 
