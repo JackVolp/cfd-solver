@@ -451,6 +451,7 @@ int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 {
 
 	faces[*fidx].boundary_face = false; // Initialize boundary face flag to false, will be set to true for boundary faces in build_boundary_face
+	faces[*fidx].boundary_id = -1; //Initialize boundary id to -1, will be set later when boundaries are built 
 
 	if (c->type < 5) //Check for degenerate cell
 	{
@@ -712,7 +713,7 @@ int calculate_FC_AV(face* f, cell* c_owner, cell* c_neighbor, node* nodes, int* 
 	return 0;
 }
 
-int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node* nodes, face* faces, int* NFACES)
+int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES)
 {
 
 	int initial_capacity = 10; // Initial capacity for face_ids array
@@ -756,6 +757,7 @@ int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node*
 					b->face_ids = tmp;
 				}
 				b->face_ids[b->num_faces] = faces[i].id;
+				faces[i].boundary_id = b->id; // Set the boundary id for the face
 				b->num_faces++;
 			}
 		}
@@ -782,6 +784,7 @@ int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node*
 					b->face_ids = tmp;
 				}
 				b->face_ids[b->num_faces] = faces[i].id;
+				faces[i].boundary_id = b->id; // Set the boundary id for the face
 				b->num_faces++;
 			}
 		}
@@ -800,6 +803,9 @@ int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node*
 		free(b->face_ids);
 		return 2;
 	}
+
+	//set boundary data
+	b->data = bData;
 	return 0;
 }
 

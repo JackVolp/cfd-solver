@@ -39,14 +39,24 @@ enum {
 	VTK_HEXAGONAL_PRISM = 16,
 };
 
+typedef union boundaryData {
+	double q_b; // Neumann boundary condition value (flux)
+	struct {
+		double h_inf; // Robin boundary condition coefficient
+		double phi_inf; // Robin boundary condition ambient temperature
+	} robin;
+	double phi_b; // Dirichlet boundary condition value (temperature)
+} boundaryData;
+
 typedef struct boundary {
 	int id; // Surface ID
 	int endpoints[2]; // Endpoints of the surface (if applicable)
 	int num_faces; // Number of faces in the surface
 	int* face_ids; // Array of face IDs that define the surface
 	boundaryType type; // Boundary condition type (Dirichlet, Neumann, Robin)
+	// The conditional information if from ai, i havent read about how unions/ shared memory stuff works
+	boundaryData data; // Union to hold boundary condition data (e.g., value for Dirichlet, flux for Neumann, coefficients for Robin)
 } boundary;
-
 
 typedef struct node {
 	double x, y, z; // Node coordinates
@@ -72,7 +82,7 @@ typedef struct face {
 	int owner; //owner cell ID
 	int neighbor; //neighbor cell ID (uses cell id of degenerate face/edge cell for boundary faces)
 	bool boundary_face; //flag to indicate if this is a boundary face
-
+	int boundary_id; // If boundary face, store boundary id for easy access to boundary condition information. Otherwise can be set to -1 or some other invalid value.
 	double xc, yc, zc; //face centroid
 	double Sx, Sy, Sz; //Face area vector
 	double Ex, Ey, Ez; // orthogonal contribution
@@ -104,7 +114,7 @@ int build_boundary_face(cell* c, face* faces, node* nodes, cell* cells, int k, i
 
 int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx);
 
-int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, node* nodes, face* faces, int* NFACES);
+int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES);
 
 int build_faces_and_cells(node* nodes,
 	cell* cells,

@@ -1,13 +1,13 @@
-/*
-
-*/
 
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-// Physical constants
+// Solver parameters
+#define MAX_ITER 1
 
-//Thermal Diffusivity of air at room temperature (m^2/s)
-#define GAMMA 1 //1.87e-5
+// Physical constants
+//Thermal Diffusivity of aluminum at room temperature (m^2/s)
+#define GAMMA 9.88e-5
+
 
 #endif // !CONSTANTS_H
