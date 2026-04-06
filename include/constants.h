@@ -7,7 +7,7 @@
 
 // Physical constants
 //Thermal Diffusivity of aluminum at room temperature (m^2/s)
-#define GAMMA 9.88e-5
+#define GAMMA 1
 
 // Source Term
 //#define Q_C(x,y,z) (10*x + 5)
