@@ -181,7 +181,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 					grad[IDX(1, F_idx, 3)] = grad_face[1];
 					grad[IDX(2, F_idx, 3)] = grad_face[2];
 
-					double fluxVb = -GAMMA * gDiff_b * phi[C_idx] - GAMMA*dot(grad_face,Tf); //nonlinearized flux contibution
+					double fluxVb = -GAMMA * gDiff_b * phi[F_idx] - GAMMA*dot(grad_face,Tf); //nonlinearized flux contibution
 
 					b[Csol_idx] += -fluxVb; // Source term contribution for owner cell, negative since we are moving it to the right hand side of the equation
 					break;
