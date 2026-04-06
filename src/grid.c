@@ -449,7 +449,6 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 
 int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 {
-
 	faces[*fidx].boundary_face = false; // Initialize boundary face flag to false, will be set to true for boundary faces in build_boundary_face
 	faces[*fidx].boundary_id = -1; //Initialize boundary id to -1, will be set later when boundaries are built 
 

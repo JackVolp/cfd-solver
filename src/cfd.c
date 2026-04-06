@@ -16,10 +16,13 @@
 int main(void)
 {	
 	/*----------------------Grid Input Filename------------------*/
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
-	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
+	const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
+	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN16.vtk"; // problem 1 grid 1
 	/*-----------------------------------------------------------*/
-
+	// Output file name
+	const char* out_fname = "output_file.vtk";
+	//const char* out_fname = "p1N16_out.vtk";
 
 	// Load grid
 	node* nodes;
@@ -122,12 +125,8 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
-	// initialize phi[eq=0] to 1 everywhere and 0 for other equations
+	// initialize phi to 0 everywhere
 	memset(phi, 0, (NEQNS * NCELLS) * sizeof(double));
-	for (int i = 0; i < NCELLS; i++)
-	{
-		phi[IDX(i, 0, NCELLS)] = 1;
-	}
 
 	// initialize grad to zero
 	memset(grad, 0, ((int)3 * NCELLS) * sizeof(double));
@@ -150,22 +149,22 @@ int main(void)
 		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i],p1_boundary_data[i], nodes, faces, &NFACES);
 	}
 	
-	// Initialize phi on the boundaries
-	for (int i = 0; i < NBOUNDARIES; i++)
-	{
-		err = initBoundary(&boundaries[i], cells, faces, phi, grad, &NCELLS);
-
-		if (err != 0)
-		{
-			fprintf(stderr, "initBoundary failed with error code %d\n", err);
-			return 1;
-		}
-	}
-
 	// ------------Solver Loop---------------------------
 	for (int i = 0; i < MAX_ITER; i++)
 	{
-		// Compute Gradient
+		// Apply boundary conditions (sets phi on boundaries)
+		for (int i = 0; i < NBOUNDARIES; i++)
+		{
+			err = applyBoundary(&boundaries[i], cells, faces, phi, grad, &NCELLS);
+
+			if (err != 0)
+			{
+				fprintf(stderr, "initBoundary failed with error code %d\n", err);
+				return 1;
+			}
+		}
+
+		// Compute Gradient at cell centers and at boundary faces
 		err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, phi, grad);
 		if (err != 0)
 		{
@@ -256,8 +255,8 @@ int main(void)
 	//  
 	*/
 
-	// ------ Write output file --------
-	err = write_vtk_output("output_file.vtk", &nodes, &cells, &NPOINTS, &NCELLS,
+	// ------ Write output file --------"output_file.vtk"
+	err = write_vtk_output(out_fname, &nodes, &cells, &NPOINTS, &NCELLS,
 		&CELL_LIST_SIZE, &phi, &grad);
 	if (err != 0)
 	{
@@ -363,9 +362,9 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%.15f %.15f %.15f\n",
-			(*grad)[vecIDX(i, 0, *NCELLS)],
-			(*grad)[vecIDX(i, 1, *NCELLS)],
-			(*grad)[vecIDX(i, 2, *NCELLS)]);
+			(*grad)[IDX(0, i, 3)],
+			(*grad)[IDX(1, i, 3)],
+			(*grad)[IDX(2, i, 3)]);
 	}
 
 	// Optional: mark degenerate cells explicitly
@@ -391,88 +390,4 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 
 
 
-int initBoundary(boundary* b, cell* cells, 
-	face* faces, double* phi, double* grad, int* NCELLS)
-{
-	// Loop over all faces in boundary and apply boundary conditions
-	for (int i = 0; i < b->num_faces; i++)
-	{
-		int face_id = b->face_ids[i];
-		face* f = &faces[face_id];
-		cell* c_owner = &cells[f->owner];
-
-		// Should always be a boundary face but just to be sure
-		int phi_face_idx = f->neighbor ; // If boundary face, use owner cell for phi index, otherwise use neighbor cell (should not trigger for internal faces)
-
-		int phi_owner_idx = f->owner; // Index for owner cell in phi array
-
-		switch (b->type)
-		{
-		case Dirichlet: 
-			// For Dirichlet, we can set the boundary value directly
-			phi[phi_face_idx] = b->data.phi_b; // Set phi at owner cell to boundary value
-			break;
-		case Neumann: {
-			// magnitude of surface area vector
-			double Ef[3] = { f->Ex, f->Ey, f->Ez }; // Surface area vector of face
-			double Ef_mag = 0;
-			magnitude(Ef, &Ef_mag);
-
-			// Distance from owner cell centroid to face centroid
-			// Always positive since face vector always points outward from owner cell
-			double rCF[3] = { f->xc - c_owner->xc, f->yc - c_owner->yc, f->zc - c_owner->zc }; // vector from cell centroid to face centroid
-
-			double d_CF = 0;
-			magnitude(rCF, &d_CF);
-
-			double gDiff = Ef_mag / d_CF; // "Geometric Diffusion Coefficient"
-
-			phi[phi_face_idx] = (GAMMA * gDiff * phi[phi_owner_idx] - b->data.q_b) 
-				/ (GAMMA * gDiff); // Eq 8.42 from textbook
-			break;
-		}
-		case Robin: {
-			// For Robin, we need to calculate the equivalent boundary value based on the given phi_b, q_b, and h_infty
-			// Ignore cross diffusion term for initialization? maybe. Dont have gradient at face yet
-			
-			double h_inf = b->data.robin.h_inf;
-			double phi_inf = b->data.robin.phi_inf;
-
-			// magnitude of surface area vector
-			double Ef[3] = { f->Ex, f->Ey, f->Ez }; // Surface area vector of face
-			double Ef_mag = 0;
-			magnitude(Ef, &Ef_mag);
-
-			// Distance from owner cell centroid to face centroid
-			// Always positive since face vector always points outward from owner cell
-			double rCF[3] = { f->xc - c_owner->xc, f->yc - c_owner->yc, f->zc - c_owner->zc }; // vector from cell centroid to face centroid
-
-			double d_CF = 0;
-			magnitude(rCF, &d_CF);
-
-			double gDiff = Ef_mag / d_CF; // "Geometric Diffusion Coefficient"
-
-			double Sf[3] = { f->Sx, f->Sy, f->Sz }; // Surface area vector of face
-			double Sf_mag = 0;
-			magnitude(Sf, &Sf_mag);
-
-			// Compute phi at the boundary using eq.8.85	
-			double gradPhi_face[3] = { grad[vecIDX(phi_face_idx, 0, *NCELLS)], grad[vecIDX(phi_face_idx, 1, *NCELLS)], grad[vecIDX(phi_face_idx, 2, *NCELLS)] }; 
-
-			double grad_dot_Tf = gradPhi_face[0] * f->Tx + gradPhi_face[1] * f->Ty + gradPhi_face[2] * f->Tz; // Gradient at face dot tangential contribution vector of face
-
-			phi[phi_face_idx] = (h_inf * Sf_mag * phi_inf
-				+ GAMMA*gDiff*phi[phi_owner_idx]
-				- GAMMA*grad_dot_Tf) / (h_inf*Sf_mag + GAMMA*gDiff);
-			break;
-		}
-		default:
-			fprintf(stderr, "Error: Unknown boundary condition type for boundary ID %d\n", b->id);
-			return 1;
-		}
-	}
-
-	
-	return 0;
-}
 

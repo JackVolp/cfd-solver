@@ -3,7 +3,7 @@
 #define CONSTANTS_H
 
 // Solver parameters
-#define MAX_ITER 1
+#define MAX_ITER 10000
 
 // Physical constants
 //Thermal Diffusivity of aluminum at room temperature (m^2/s)

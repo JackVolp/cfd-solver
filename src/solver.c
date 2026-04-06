@@ -85,8 +85,8 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 		A22[vC_idx] += w * dyk * dyk;
 
 		// Update b for owner cell
-		b[vecIDX(vC_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
-		b[vecIDX(vC_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
+		b[IDX(vC_idx,0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
+		b[IDX(vC_idx,1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
 
 		// Update A11, A12, A22, and b for neighbor cell if the neighbor cell is not degenerate. Neighbor will be degenerate for boundary cells.
 		if (!f->boundary_face)
@@ -96,8 +96,8 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 			A22[vF_idx] += w * dyk * dyk;
 
 			// Update b for neighbor cell
-			b[vecIDX(vF_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
-			b[vecIDX(vF_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
+			b[IDX(vF_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
+			b[IDX(vF_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
 		}
 
 
@@ -110,8 +110,9 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 		int cell_id = i + *NDEGEN_CELLS; // Adjust index to account for degenerate cells at the beginning of the cells array
 
 		solve_2x2_system(A11[i], A12[i], A12[i], A22[i],
-			b[vecIDX(i, 0, NVOL_CELLS)], b[vecIDX(i, 1, NVOL_CELLS)],
-			&grad[vecIDX(cell_id, 0, *NCELLS)], &grad[vecIDX(cell_id, 1, *NCELLS)]); // Store gradient in correct location in grad array based on cell id
+			b[IDX(i, 0, NVOL_CELLS)], b[IDX(i, 1, NVOL_CELLS)],
+			&grad[IDX(0, cell_id, 3)], &grad[IDX(1, cell_id, 3)]); // Store gradient in correct location in grad array based on cell id
+		grad[IDX(2, cell_id, 3)] = 0.0;
 	}
 
 	// Free allocated memory for gradient coefficient matrices
@@ -123,7 +124,7 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 }
 
 
-
+// this function also updates the gradient vector at the boundary /degenerate cell indicies with the gradients at the boundary faces. This should prob be in a different function
 int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
@@ -173,7 +174,12 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 					
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-					grad2face(grad_face, &grad[vecIDX(C_idx, 0, *NCELLS)], &grad[vecIDX(F_idx, 0, *NCELLS)], rCF, dCF, phi[C_idx], phi[F_idx]);
+					grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx]);
+
+					// Update Gradient at face
+					grad[IDX(0, F_idx, 3)] = grad_face[0];
+					grad[IDX(1, F_idx, 3)] = grad_face[1];
+					grad[IDX(2, F_idx, 3)] = grad_face[2];
 
 					double fluxVb = -GAMMA * gDiff_b * phi[C_idx] - GAMMA*dot(grad_face,Tf); //nonlinearized flux contibution
 
@@ -198,7 +204,12 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-					grad2face(grad_face, &grad[vecIDX(C_idx, 0, *NCELLS)], &grad[vecIDX(F_idx, 0, *NCELLS)], rCF, dCF, phi[C_idx], phi[F_idx]);
+					grad2face(grad_face, &grad[3 * C_idx], &grad[3 * F_idx], rCF, dCF, phi[C_idx], phi[F_idx]);
+
+					// Update Gradient at face
+					grad[IDX(0, F_idx, 3)] = grad_face[0];
+					grad[IDX(1, F_idx, 3)] = grad_face[1];
+					grad[IDX(2, F_idx, 3)] = grad_face[2];
 
 					double fluxVb = -fluxCb * phi_inf - (h_inf * Sf_mag * GAMMA * dot(grad_face, Tf)) / (h_inf * Sf_mag + GAMMA * gDiff_b); // eq. 8.87, nonlinearized flux contribution 
 
@@ -222,7 +233,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 			// interpolate gradient to face using Eq. (9.33)
 
 			double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-			grad2face(grad_face, &grad[vecIDX(C_idx, 0, *NCELLS)], &grad[vecIDX(F_idx, 0, *NCELLS)], rCF, dCF, phi[C_idx], phi[F_idx]);
+			grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx]);
 
 			// Contribution to source term for owner cell
 			
@@ -251,5 +262,90 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 	grad_face[0] = grad_face_avg[0] + correction_vec[0];
 	grad_face[1] = grad_face_avg[1] + correction_vec[1];
 	grad_face[2] = grad_face_avg[2] + correction_vec[2];
+	return 0;
+}
+
+int applyBoundary(boundary* b, cell* cells,
+	face* faces, double* phi, double* grad, int* NCELLS)
+{
+	// Loop over all faces in boundary and apply boundary conditions
+	for (int i = 0; i < b->num_faces; i++)
+	{
+		int face_id = b->face_ids[i];
+		face* f = &faces[face_id];
+		cell* c_owner = &cells[f->owner];
+
+		// Should always be a boundary face but just to be sure
+		int phi_face_idx = f->neighbor; // If boundary face, use owner cell for phi index, otherwise use neighbor cell (should not trigger for internal faces)
+
+		int phi_owner_idx = f->owner; // Index for owner cell in phi array
+
+		switch (b->type)
+		{
+		case Dirichlet:
+			// For Dirichlet, we can set the boundary value directly
+			phi[phi_face_idx] = b->data.phi_b; // Set phi at owner cell to boundary value
+			break;
+		case Neumann: {
+			// magnitude of surface area vector
+			double Ef[3] = { f->Ex, f->Ey, f->Ez }; // Surface area vector of face
+			double Ef_mag = 0;
+			magnitude(Ef, &Ef_mag);
+
+			// Distance from owner cell centroid to face centroid
+			// Always positive since face vector always points outward from owner cell
+			double rCF[3] = { f->xc - c_owner->xc, f->yc - c_owner->yc, f->zc - c_owner->zc }; // vector from cell centroid to face centroid
+
+			double d_CF = 0;
+			magnitude(rCF, &d_CF);
+
+			double gDiff = Ef_mag / d_CF; // "Geometric Diffusion Coefficient"
+
+			phi[phi_face_idx] = (GAMMA * gDiff * phi[phi_owner_idx] - b->data.q_b)
+				/ (GAMMA * gDiff); // Eq 8.42 from textbook
+			break;
+		}
+		case Robin: {
+			// For Robin, we need to calculate the equivalent boundary value based on the given phi_b, q_b, and h_infty
+			// Ignore cross diffusion term for initialization? maybe. Dont have gradient at face yet
+
+			double h_inf = b->data.robin.h_inf;
+			double phi_inf = b->data.robin.phi_inf;
+
+			// magnitude of surface area vector
+			double Ef[3] = { f->Ex, f->Ey, f->Ez }; // Surface area vector of face
+			double Ef_mag = 0;
+			magnitude(Ef, &Ef_mag);
+
+			// Distance from owner cell centroid to face centroid
+			// Always positive since face vector always points outward from owner cell
+			double rCF[3] = { f->xc - c_owner->xc, f->yc - c_owner->yc, f->zc - c_owner->zc }; // vector from cell centroid to face centroid
+
+			double d_CF = 0;
+			magnitude(rCF, &d_CF);
+
+			double gDiff = Ef_mag / d_CF; // "Geometric Diffusion Coefficient"
+
+			double Sf[3] = { f->Sx, f->Sy, f->Sz }; // Surface area vector of face
+			double Sf_mag = 0;
+			magnitude(Sf, &Sf_mag);
+
+			// Compute phi at the boundary using eq.8.85	
+			double gradPhi_face[3] = { grad[IDX(0,phi_face_idx,3)], grad[IDX(1,phi_face_idx,3)], grad[IDX(2,phi_face_idx,3)] };
+
+			double grad_dot_Tf = gradPhi_face[0] * f->Tx + gradPhi_face[1] * f->Ty + gradPhi_face[2] * f->Tz; // Gradient at face dot tangential contribution vector of face
+
+			phi[phi_face_idx] = (h_inf * Sf_mag * phi_inf
+				+ GAMMA * gDiff * phi[phi_owner_idx]
+				- GAMMA * grad_dot_Tf) / (h_inf * Sf_mag + GAMMA * gDiff);
+			break;
+		}
+		default:
+			fprintf(stderr, "Error: Unknown boundary condition type for boundary ID %d\n", b->id);
+			return 1;
+		}
+	}
+
+
 	return 0;
 }
