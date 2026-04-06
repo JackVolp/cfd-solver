@@ -18,13 +18,13 @@ int main(void)
 	/*----------------------Grid Input Filename------------------*/
 	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
 	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
-	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN16.vtk"; // problem 1 grid 1
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\1dN16.vtk";
+	const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN128.vtk"; // problem 1 grid 1
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\1dN16.vtk";
 
 	/*-----------------------------------------------------------*/
 	// Output file name
 	//onst char* out_fname = "output_file.vtk";
-	const char* out_fname = "p1N16_out.vtk";
+	const char* out_fname = "p1N128_out.vtk";
 
 	// Load grid
 	node* nodes;
@@ -178,6 +178,7 @@ int main(void)
 			// initialize matrix coefficients and source term vector to zero
 		memset(A, 0, (NEQNS* NSOLCELLS* NSOLCELLS) * sizeof(double));
 		memset(b, 0, ((NEQNS* NSOLCELLS) * sizeof(double)));
+
 		err = build_matrix(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
 		{
