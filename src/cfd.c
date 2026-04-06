@@ -8,15 +8,10 @@
 #include "math_helpers.h"
 #include "grid.h"
 #include "cfd.h"
+#include "solver.h"
 #include "constants.h"
 #include "math_helpers.h"
 
-/* Indexing macros (row major)*/
-//#define IDX(i,j,nx) ((j)*(nx) + (i))
-//#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
-
-#define IDX(i,eq,NCELLS) ( (i) + (eq*NCELLS) )
-#define vecIDX(i,j,nx) ( (j)*(nx) + (i) ) //indexing for vectors stored in row major format as [x1,x2,...,xn,y1,y2,...yn,z1,z2,...zn]. nx is number of cells in this case. All the x-dirs, then all the y dirs, then all the z-dirs. I is the index of phi and j is the index of the direction (0,1,2 for x,y,z respectively)
 
 int main(void)
 {	
@@ -31,11 +26,13 @@ int main(void)
 	cell* cells; 
 	face* faces;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4, NSOLCELLS = 0;
 
 
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
 	int err = read_grid(filename, &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS);
+
+	NSOLCELLS = NCELLS - NDEGEN_CELLS; // Number of cells that have volume and are included in the solution
 	
 	if (err != 0)
 	{
@@ -66,6 +63,65 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
+	lapack_int n = NSOLCELLS; // Number of equations (size of the system)
+	lapack_int nrhs = 1; // Number of right-hand sides (columns of B)
+	lapack_int lda = NSOLCELLS; // Leading dimension of A
+	lapack_int ldb = NSOLCELLS; // Leading dimension of B
+
+	lapack_int* ipiv = malloc(NSOLCELLS * sizeof(lapack_int)); // Pivot indices for LU factorization
+	if (!ipiv)
+	{
+		// Print error message to stderr stream and exit
+		fprintf(stderr, "Error: Memory allocation failed for ipiv array.\n");
+		return 1; // Exit with error code
+	}
+
+	//
+	// Allocate and initialize matrix coefficients and source term vector for linear system
+	// For each row (cell):
+	// one aC item
+	// num_faces aF items
+	// replace with sparse storage later 
+	//
+	//double* aC = malloc(NCELLS * sizeof(double)); // Diagonal coefficients
+	//if (!aC)
+	//{
+	//	// print error message to stderr stream
+	//	fprintf(stderr, "Error: Memory allocation failed for aC array.\n");
+	//	return 1; // Exit with error code
+	//}
+
+	//double* aF = malloc((MAX_FACES) * sizeof(double)); // Off-diagonal coefficients (face contributions)
+	//if (!aF)
+	//{
+	//	// print error message to stderr stream
+	//	fprintf(stderr, "Error: Memory allocation failed for aF array.\n");
+	//	return 1; // Exit with error code
+	//}
+
+	//int* f_col = malloc((MAX_FACES) * sizeof(int)); // Column indices for off-diagonal coefficients (cell id of the neighbor cells
+	//if (!f_col)
+	//{
+	//	// print error message to stderr stream
+	//	fprintf(stderr, "Error: Memory allocation failed for f_col array.\n");
+	//	return 1; // Exit with error code
+	//}
+	double* A = malloc((NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double)); // Coefficient matrix (will be stored in sparse format later)
+	if (!A)
+	{
+		// print error message to stderr stream
+		fprintf(stderr, "Error: Memory allocation failed for A array.\n");
+		return 1; // Exit with error code
+	}
+
+	double* b = malloc(NSOLCELLS * sizeof(double)); // Source term vector
+	if (!b)
+	{
+		// print error message to stderr stream
+		fprintf(stderr, "Error: Memory allocation failed for b array.\n");
+		return 1; // Exit with error code
+	}
+
 	// initialize phi[eq=0] to 1 everywhere and 0 for other equations
 	memset(phi, 0, (NEQNS * NCELLS) * sizeof(double));
 	for (int i = 0; i < NCELLS; i++)
@@ -76,7 +132,6 @@ int main(void)
 	// initialize grad to zero
 	memset(grad, 0, ((int)3 * NCELLS) * sizeof(double));
 
-	// initialize gradient array
 	// Initialize boundaries (change to allocate for more complex gemoetry)
 	boundary boundaries[4]; // boundaries
 	boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
@@ -107,16 +162,45 @@ int main(void)
 		}
 	}
 
-	// Solver Loop
+	// ------------Solver Loop---------------------------
 	for (int i = 0; i < MAX_ITER; i++)
 	{
+		// Compute Gradient
 		err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, phi, grad);
 		if (err != 0)
 		{
 			fprintf(stderr, "compute_lsq_gradient failed with error code %d\n", err);
 			return 1;
 		}
+
+		// Build Matrix and Source term
+			// initialize matrix coefficients and source term vector to zero
+		memset(A, 0, (NEQNS* NSOLCELLS* NSOLCELLS) * sizeof(double));
+		memset(b, 0, ((NEQNS* NSOLCELLS) * sizeof(double)));
+		err = build_matrix(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		if (err != 0)
+		{
+			fprintf(stderr, "build_matrix failed with error code %d\n", err);
+			return 1;
+		}
+
+		// Solve Linear System A*phi = b for phi
+		lapack_int info = LAPACKE_dgesv(LAPACK_COL_MAJOR, n, nrhs, A, lda, ipiv, b, ldb);
+		if (info != 0)
+		{
+			fprintf(stderr, "LAPACKE_dgesv failed with error code %d\n", info);
+			return 1;
+		}
+		
+		// Lapack dgesv overwrites the right-hand side vector b with the solution, so we can copy it back to phi for the next iteration
+		for (int j=0; j < NSOLCELLS; j++)
+		{
+			phi[j+NDEGEN_CELLS] = b[j];
+		}
+
 	}
+	//---------------------------------------------------
+
 
 	/* Iteration loop
 	* //Calculate gradient at faces
@@ -151,6 +235,8 @@ int main(void)
 	* 
 	*		switch (boundary condition type)
 	*		case Dirichlet: 
+	*			af(owner) += -gamma(face)*Ef(face)/dCF
+	*			ac(owner) = gamma(face)*Ef(face)/dCF
 	*			dirichelet coefficents pg 252
 	*		case Neumann:
 	*			neumann coefficients pg 221
@@ -185,8 +271,9 @@ int main(void)
 	// Release conservatiWve scalars memory
 	free(phi);
 	free(grad);
-
-	
+	free(A);
+	free(b);
+	free(ipiv);
 
 	printf("To C or not to C: that is the question. \n");
 	return 0;
@@ -302,126 +389,7 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	return 0;
 }
 
-int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
-	int *NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
 
-{	// Initialize gradient coefficint matrix to zero (See eq. 9.27)
-	// Number of cells w/ volume
-	int NVOL_CELLS = (*NCELLS) - (*NDEGEN_CELLS);
-
-	// A12 and A21 are the same matrix so only need to allocate one of them
-	double* A11 = malloc(NVOL_CELLS * sizeof(double));
-	if (A11 == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for A11 array.\n");
-		return 1;
-	}
-
-	double* A12 = malloc(NVOL_CELLS * sizeof(double));
-	if (A12 == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for A12 array.\n");
-		free(A11); // Free previously allocated A11 before exiting
-		return 1;
-	}
-
-	double* A22 = malloc(NVOL_CELLS * sizeof(double));
-	if (A22 == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for A22 array.\n");
-		free(A11); // Free previously allocated A11 before exiting
-		free(A12); // Free previously allocated A12 before exiting
-		return 1;
-	}
-
-	// Initialize B vector for least squares gradient calculation, size is NCELLS x 2 (x and y components)
-	double* b = malloc(NVOL_CELLS * sizeof(double) * 2);
-	if (b == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for b1 array.\n");
-		free(A11); // Free previously allocated A11 before exiting
-		free(A12); // Free previously allocated A12 before exiting
-		free(A22); // Free previously allocated A22 before exiting
-		return 1;
-	}
-
-
-	// Initialize coefficients to zero
-	memset(A11, 0, NVOL_CELLS * sizeof(double));
-	memset(A12, 0, NVOL_CELLS * sizeof(double));
-	memset(A22, 0, NVOL_CELLS * sizeof(double));
-	memset(b, 0, NVOL_CELLS * sizeof(double) * 2);
-
-	// Loop over all faces and calculate contributions to gradient coefficient matrices
-	for (int i = 0; i < *NFACES; i++)
-	{
-		face* f = &faces[i];
-
-		//if (f->neighbor == -1)
-		//{
-		//	// Boundary face, skip for now (will need to apply boundary conditions later)
-		//	continue;
-		//}
-
-		cell* C = &cells[f->owner];
-		cell* F = &cells[f->neighbor];
-
-		// Indicies for arrays with size of volume cells 
-		int vC_idx = C->id - *NDEGEN_CELLS;
-		int vF_idx = F->id - *NDEGEN_CELLS;
-
-		//Define rCF 
-		double dxk = f->xc - C->xc;
-		double dyk = f->yc - C->yc;
-		//double dzk = f->zc - C->zc;
-
-		double dphi = phi[IDX(F->id, 0, *NCELLS)] - phi[IDX(C->id, 0, *NCELLS)];
-
-		// Compute Weight
-		double w = 1.0 / sqrt(dxk * dxk + dyk * dyk);
-
-		// Update A11, A12, A22, and b for owner cell
-		A11[vC_idx] += w * dxk * dxk;
-		A12[vC_idx] += w * dxk * dyk; // same as A21
-		A22[vC_idx] += w * dyk * dyk;
-
-		// Update b for owner cell
-		b[vecIDX(vC_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
-		b[vecIDX(vC_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
-
-		// Update A11, A12, A22, and b for neighbor cell if the neighbor cell is not degenerate. Neighbor will be degenerate for boundary cells.
-		if (!f->boundary_face)
-		{
-			A11[vF_idx] += w * dxk * dxk;
-			A12[vF_idx] += w * dxk * dyk; // same as A21
-			A22[vF_idx] += w * dyk * dyk;
-
-			// Update b for neighbor cell
-			b[vecIDX(vF_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
-			b[vecIDX(vF_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
-		}
-		
-
-			
-	}
-
-	// Loop over all cells and solve for gradient
-	for (int i = 0; i < NVOL_CELLS; i++)
-	{
-		int cell_id = i + *NDEGEN_CELLS; // Adjust index to account for degenerate cells at the beginning of the cells array
-
-		solve_2x2_system(A11[i], A12[i], A12[i], A22[i], 
-			b[vecIDX(i,0,NVOL_CELLS)], b[vecIDX(i, 1, NVOL_CELLS)],
-			&grad[vecIDX(cell_id, 0, *NCELLS)], &grad[vecIDX(cell_id, 1, *NCELLS)]); // Store gradient in correct location in grad array based on cell id
-	}
-
-	// Free allocated memory for gradient coefficient matrices
-	free(A11);
-	free(A12);
-	free(A22);
-	free(b);
-	return 0;
-}
 
 int initBoundary(boundary* b, cell* cells, 
 	face* faces, double* phi, double* grad, int* NCELLS)
@@ -507,3 +475,4 @@ int initBoundary(boundary* b, cell* cells,
 	
 	return 0;
 }
+

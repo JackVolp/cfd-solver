@@ -4,7 +4,6 @@
 #include <math.h>
 #include <stdbool.h>
 
-
 void magnitude(double* v, double* result)
 {
 	*result = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);

@@ -22,6 +22,5 @@ for robin phi_b and h_infty used
 int initBoundary(boundary* b, cell* cells,
 	face* faces, double* phi, double* grad, int* NCELLS);
 
-int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,	int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad);
 
 #endif // !
