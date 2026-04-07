@@ -349,3 +349,21 @@ int applyBoundary(boundary* b, cell* cells,
 
 	return 0;
 }
+
+// computes maximum % change for solution cells
+int maxChng(double* phi, double* phi_old, int* NCELLS, int* NDEGEN_CELLS, double* epsilon)
+{
+	double max_change = 0.0;
+
+	for (int i = *NDEGEN_CELLS; i < *NCELLS; i++)
+	{
+		double change = fabs((phi[i] - phi_old[i]) / fmax(phi[i],1e-15));
+		if (change > max_change)
+		{
+			max_change = change;
+		}
+	}
+
+	*epsilon = max_change;
+	return 0;
+}

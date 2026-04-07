@@ -16,13 +16,15 @@
 int main(void)
 {	
 	/*----------------------Grid Input Filename------------------*/
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
 	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
-	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN16.vtk"; // problem 1 grid 1
+	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN128.vtk"; // problem 1 grid 1
+	const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\2dN128x128_tri.vtk";
 	/*-----------------------------------------------------------*/
 	// Output file name
-	const char* out_fname = "output_file.vtk";
-	//const char* out_fname = "p1N16_out.vtk";
+	//const char* out_fname = "output_file.vtk";
+	//const char* out_fname = "p1N128_out.vtk";
+	const char* out_fname = "p5_128x128.vtk";
 
 	// Load grid
 	node* nodes;
@@ -57,6 +59,14 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
+	double* phi_old = malloc((NEQNS * NCELLS) * sizeof(double));
+	if (!phi_old)
+	{
+		// Print error message to stderr stream and exit
+		fprintf(stderr, "Error: Memory allocation failed for phi_old array.\n");
+		return 1; // Exit with error code
+	}
+
 	// Allocate gradient array (3 components for x,y,z)
 	double* grad = malloc((3 * NCELLS) * sizeof(double));
 	if (grad == NULL)
@@ -79,36 +89,6 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
-	//
-	// Allocate and initialize matrix coefficients and source term vector for linear system
-	// For each row (cell):
-	// one aC item
-	// num_faces aF items
-	// replace with sparse storage later 
-	//
-	//double* aC = malloc(NCELLS * sizeof(double)); // Diagonal coefficients
-	//if (!aC)
-	//{
-	//	// print error message to stderr stream
-	//	fprintf(stderr, "Error: Memory allocation failed for aC array.\n");
-	//	return 1; // Exit with error code
-	//}
-
-	//double* aF = malloc((MAX_FACES) * sizeof(double)); // Off-diagonal coefficients (face contributions)
-	//if (!aF)
-	//{
-	//	// print error message to stderr stream
-	//	fprintf(stderr, "Error: Memory allocation failed for aF array.\n");
-	//	return 1; // Exit with error code
-	//}
-
-	//int* f_col = malloc((MAX_FACES) * sizeof(int)); // Column indices for off-diagonal coefficients (cell id of the neighbor cells
-	//if (!f_col)
-	//{
-	//	// print error message to stderr stream
-	//	fprintf(stderr, "Error: Memory allocation failed for f_col array.\n");
-	//	return 1; // Exit with error code
-	//}
 	double* A = malloc((NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double)); // Coefficient matrix (will be stored in sparse format later)
 	if (!A)
 	{
@@ -152,10 +132,14 @@ int main(void)
 	// ------------Solver Loop---------------------------
 	for (int i = 0; i < MAX_ITER; i++)
 	{
+		// Save old phi
+		phi_old = memcpy(phi_old, phi, (NEQNS * NCELLS) * sizeof(double));
+
+
 		// Apply boundary conditions (sets phi on boundaries)
-		for (int i = 0; i < NBOUNDARIES; i++)
+		for (int j = 0; j < NBOUNDARIES; j++)
 		{
-			err = applyBoundary(&boundaries[i], cells, faces, phi, grad, &NCELLS);
+			err = applyBoundary(&boundaries[j], cells, faces, phi, grad, &NCELLS);
 
 			if (err != 0)
 			{
@@ -191,11 +175,30 @@ int main(void)
 			return 1;
 		}
 		
-		// Lapack dgesv overwrites the right-hand side vector b with the solution, so we can copy it back to phi for the next iteration
+		// Lapack dgesv overwrites the right-hand side vector b with the solution, so we can copy it back to phi for the next iteration. We can also use b to compute the maximum change
+		
+
 		for (int j=0; j < NSOLCELLS; j++)
 		{
 			phi[j+NDEGEN_CELLS] = b[j];
 		}
+
+
+		// Stopping condition and printing change
+		double epsilon;
+		err = maxChng(phi_old, phi, &NCELLS, &NDEGEN_CELLS, &epsilon);
+		if (i % RPRT_INTERVAL == 0)
+		{
+			printf("ITER = %d \n", i+1);
+			printf("Max change = %g \n", epsilon);
+		}
+		if (epsilon <= STOP_COND)
+		{
+			printf("STOP_COND HIT after %d iterations\n",i+1);
+			printf("Max change = %g \n", epsilon);
+			break;
+		}
+
 
 	}
 	//---------------------------------------------------
@@ -273,6 +276,8 @@ int main(void)
 	free(A);
 	free(b);
 	free(ipiv);
+	free(phi_old);
+
 
 	printf("To C or not to C: that is the question. \n");
 	return 0;
