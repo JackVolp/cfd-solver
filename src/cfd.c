@@ -160,6 +160,7 @@ int main(void)
 			// initialize matrix coefficients and source term vector to zero
 		memset(A, 0, (NEQNS* NSOLCELLS* NSOLCELLS) * sizeof(double));
 		memset(b, 0, ((NEQNS* NSOLCELLS) * sizeof(double)));
+
 		err = build_matrix(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
 		{

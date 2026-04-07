@@ -609,10 +609,11 @@ int build_interior_face(cell* c, face* faces, node* nodes, cell* cells, int k, i
 		// Only make neighbor -1 if the neighbor id has not been already set. 
 		// A face on a degenerate cell will already be seen in build_boundary_face, 
 		// but the neighbor will be assigned to the degenerate cell id, so we do not want to overwrite that with -1.
-		if (!faces[*fidx].neighbor)
-		{
-			faces[*fidx].neighbor = -1;
-		}
+		faces[*fidx].neighbor = -1;
+		//if (!faces[*fidx].neighbor)
+		//{
+		//	faces[*fidx].neighbor = -1;
+		//}
 		
 		faces[*fidx].id = *fidx;
 
@@ -646,7 +647,7 @@ int build_interior_face(cell* c, face* faces, node* nodes, cell* cells, int k, i
 		//faces[*fidx].sz = Sf[2];
 
 		//// Add the face id to the cell. New face index is added to the cell
-		//c->face_ids[k] = *fidx;
+		c->face_ids[k] = *fidx;
 
 		//increment face counter
 		(*fidx)++;

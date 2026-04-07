@@ -128,7 +128,8 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
-
+		
+	// Loop over all all faces and add matrix contributions
 	for (int i = 0; i < *NFACES; i++)
 	{
 		face* f = &faces[i]; //current face
@@ -241,6 +242,17 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 			b[Fsol_idx] += -GAMMA * dot(grad_face, Tf); // Source term contribution for neighbor cell (negative of owner contribution)
 		}
 	}
+
+	//initialize b with the energy source term for all cells
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* c = &cells[i+(*NDEGEN_CELLS)];
+
+		double Q = Q_C(c->xc, c->yc, c->zc);
+
+		b[i] += Q * c->volume;
+	}
+
 	return 0;
 }
 
