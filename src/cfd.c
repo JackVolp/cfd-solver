@@ -130,6 +130,7 @@ int main(void)
 	}
 	
 	// ------------Solver Loop---------------------------
+	printf("Start Solving \n");
 	for (int i = 0; i < MAX_ITER; i++)
 	{
 		// Save old phi
