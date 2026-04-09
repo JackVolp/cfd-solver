@@ -175,7 +175,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 					
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-					grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx]);
+					grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F);
 
 					// Update Gradient at face
 					grad[IDX(0, F_idx, 3)] = grad_face[0];
@@ -205,7 +205,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-					grad2face(grad_face, &grad[3 * C_idx], &grad[3 * F_idx], rCF, dCF, phi[C_idx], phi[F_idx]);
+					grad2face(grad_face, &grad[3 * C_idx], &grad[3 * F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F);
 
 					// Update Gradient at face
 					grad[IDX(0, F_idx, 3)] = grad_face[0];
@@ -234,7 +234,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 			// interpolate gradient to face using Eq. (9.33)
 
 			double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-			grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx]);
+			grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F);
 
 			// Contribution to source term for owner cell
 			
@@ -256,14 +256,20 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 	return 0;
 }
 
-int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F)
+int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F)
 {
+	// Average gradient weights
+	double weight_C = 1. / fmax(cell_C->volume,1.e-10); // floor to prevent divide by zero
+	double weight_F = 1. / fmax(cell_F->volume,1.e-10);
+	double denom = weight_C + weight_F;
+
 	// Compute average gradient at face
 	double grad_face_avg[3] = {
-		(grad_C[0] + grad_F[0]) / 2.0,
-		(grad_C[1] + grad_F[1]) / 2.0,
-		(grad_C[2] + grad_F[2]) / 2.0
+		(grad_C[0]*weight_C + grad_F[0]*weight_F) / denom,
+		(grad_C[1]*weight_C + grad_F[1]*weight_F) / denom,
+		(grad_C[2]*weight_C + grad_F[2]*weight_F) / denom
 	}; // Average gradient at face
+
 	double eCF[3] = { rCF[0] / dCF, rCF[1] / dCF, rCF[2] / dCF }; // Unit vector from cell C to cell F
 	// Gradient correction
 	double correction = (phi_F - phi_C) / dCF - dot(grad_face_avg, eCF); // Average gradient at face dotted with unit vector from cell C to cell F

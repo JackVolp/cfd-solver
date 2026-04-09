@@ -19,7 +19,7 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int
 
 int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 
-int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F);
+int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F,cell* cell_C, cell* cell_F);
 
 int maxChng(double* phi, double* phi_old, int* NCELLS, int* NDEGEN_CELLS, double* epsilon);
 

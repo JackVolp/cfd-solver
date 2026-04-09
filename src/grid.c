@@ -768,7 +768,7 @@ int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, bound
 		// Loop over faces and find faces that have x coordinate between x0 and x1 and y coordinate between y0 and y1
 		for (int i = 0; i < *NFACES; i++)
 		{
-			if (faces[i].yc >= x0 - 1e-6 && faces[i].yc <= x0 + 1e-6)
+			if (faces[i].yc >= y0 - 1e-6 && faces[i].yc <= y0 + 1e-6)
 			{
 				// Check if we need to realloc face_ids array
 				if (b->num_faces >= initial_capacity)

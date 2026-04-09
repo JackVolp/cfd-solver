@@ -19,12 +19,16 @@ int main(void)
 	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
 	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
 	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN128.vtk"; // problem 1 grid 1
-	const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\2dN128x128_tri.vtk";
+	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\2dN128x128_tri.vtk";
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\1dN16.vtk";
+	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p4_N63x15.vtk";
+
 	/*-----------------------------------------------------------*/
 	// Output file name
 	//const char* out_fname = "output_file.vtk";
-	//const char* out_fname = "p1N128_out.vtk";
-	const char* out_fname = "p5_128x128.vtk";
+	//const char* out_fname = "p1N16_out.vtk";
+	//const char* out_fname = "p5_128x128.vtk";
+	const char* out_fname = "p4_63x15_out.vtk";
 
 	// Load grid
 	node* nodes;
@@ -362,6 +366,14 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%.15f\n", (*phi)[IDX(i, 0, *NCELLS)]);
+	}
+
+	// Cell volume
+	fprintf(fp, "SCALARS cellVolume double 1\n");
+	fprintf(fp, "LOOKUP_TABLE default\n");
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%.15f\n", (*cells)[i].volume);
 	}
 
 	// Gradient vector
