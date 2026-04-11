@@ -3,8 +3,7 @@
 #define CONSTANTS_H
 
 // Solver parameters
-#define MAX_ITER 10000
-#define STOP_COND 1e-15
+#define STOP_COND 1e-10
 #define RPRT_INTERVAL 1
 #define MAX_ITER 100
 
