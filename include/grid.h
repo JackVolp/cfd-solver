@@ -63,6 +63,13 @@ typedef struct node {
 	int id; // Node ID
 } node;
 
+typedef struct cellEntity {
+	int id; // Cell Entity id
+	char name[256]; // Cell Entity name
+
+	int* cell_ids; // Array of cell ids that belong to the entity
+} cellEntity;
+
 typedef struct cell {
 	int* node_ids; // IDs of the 8 nodes that form the cell
 	int type; // Cell type (e.g., hexahedron, tetrahedron)
@@ -73,6 +80,7 @@ typedef struct cell {
 	double volume;
 	int* face_ids;
 	int num_faces;
+	int entity_id;
 } cell;
 
 typedef struct face {

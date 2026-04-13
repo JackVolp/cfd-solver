@@ -77,10 +77,12 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	bool points_section = false;
 	bool cells_section = false;
 	bool cell_types_section = false;
+	bool cell_entity_section = false;
 
 	int pidx = 0; // Node index
 	int cidx = 0; // Cell index
 	int ctidx = 0; // Cell type index
+	int ceidx = 0; // Cell entity index
 
 	// Create Null Pointers for nodes and cells, will allocate memory after reading number of points and cells
 	node* nodes = NULL;
@@ -100,6 +102,7 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			points_section = true;
 			cells_section = false;
 			cell_types_section = false;
+			cell_entity_section = false;
 
 			// Allocate Nodes memory after reading number of points
 			nodes = malloc((size_t)(*NPOINTS) * sizeof(node));
@@ -119,6 +122,7 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			cells_section = true;
 			points_section = false;
 			cell_types_section = false;
+			cell_entity_section = false;
 
 			//Allocate Cells memory after reading number of cells
 			cells = malloc((size_t)(*NCELLS) * sizeof(cell));
@@ -144,8 +148,20 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			cell_types_section = true;
 			points_section = false;
 			cells_section = false;
+			cell_entity_section = false;
 
 			ctidx = 0; // Reset cell type index for reading cell type data
+			continue;
+		}
+
+		if (sscanf(line, "CELL_DATA %d", NCELLS) == 1)
+		{
+			cell_entity_section = true;
+			cell_types_section = false;
+			points_section = false;
+			cells_section = false;
+
+			ceidx = 0; // Reset cell entity index for reading cell entity data
 			continue;
 		}
 
@@ -230,6 +246,21 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			*MAX_FACES += get_num_faces(cell_type);
 
 			ctidx++;
+		}
+		else if (cell_entity_section)
+		{
+			int entity_id;
+			if (sscanf(line, "%d", &entity_id) == 1)
+			{
+				cells[ceidx].entity_id = entity_id;
+			}
+			else
+			{
+				fprintf(stderr, "Error reading CellEntityIds data\n");
+				return 1;
+			}
+
+			ceidx++;
 		}
 	}
 
@@ -616,35 +647,6 @@ int build_interior_face(cell* c, face* faces, node* nodes, cell* cells, int k, i
 		//}
 		
 		faces[*fidx].id = *fidx;
-
-
-		//// Face centroid
-		//faces[*fidx].xc = (nodes[node_ids[0]].x + nodes[node_ids[1]].x) / 2;
-		//faces[*fidx].yc = (nodes[node_ids[0]].y + nodes[node_ids[1]].y) / 2;
-		//faces[*fidx].zc = (nodes[node_ids[0]].z + nodes[node_ids[1]].z) / 2;
-
-		//// Face Surface Vector components
-		//double dx = nodes[node_ids[1]].x - nodes[node_ids[0]].x;
-		//double dy = nodes[node_ids[1]].y - nodes[node_ids[0]].y;
-
-		//// Create tangent surface vector
-		//double E[3] = { dx, dy };
-
-		//// Rotate the vector 90 degrees to get the normal vector candidate
-		//double Sf[3] = { dy, -dx, 0 }; // Surface area of face is the cross product of v1 and v3, 1/2((r2 - r1) x (0 - r1))
-
-		//// Check if the vector is point in the right direction (out from owner cell)
-		//if (((faces[*fidx].xc - c->xc) * Sf[0] + (faces[*fidx].yc - c->yc) * Sf[1]) < 0)
-		//{
-		//	// If the dot product is negative, the face normal is pointing inward, so we need to flip it
-		//	Sf[0] = -Sf[0];
-		//	Sf[1] = -Sf[1];
-		//}
-
-		//// Assign face vector to faces
-		//faces[*fidx].sx = Sf[0];
-		//faces[*fidx].sy = Sf[1];
-		//faces[*fidx].sz = Sf[2];
 
 		//// Add the face id to the cell. New face index is added to the cell
 		c->face_ids[k] = *fidx;
