@@ -254,8 +254,8 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			{
 				cells[ceidx].entity_id = entity_id;
 			}
-			else if (strcmp(line, "SCALARS CellEntityIds int 1") == 0);
-			else if (strcmp(line, "LOOKUP_TABLE default") == 0);
+			else if (strcmp(line, "SCALARS CellEntityIds int 1\n") == 0);
+			else if (strcmp(line, "LOOKUP_TABLE default\n") == 0);
 			else
 			{
 				fprintf(stderr, "Error reading CellEntityIds data\n");
@@ -493,6 +493,7 @@ int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 	{
 		return build_interior_face(c, faces, nodes, cells,  k, fidx); // Build interior face for normal cell
 	}
+
 }
 
 int build_boundary_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)

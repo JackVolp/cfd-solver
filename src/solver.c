@@ -70,8 +70,8 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 		int vF_idx = F->id - *NDEGEN_CELLS;
 
 		//Define rCF 
-		double dxk = f->xc - C->xc;
-		double dyk = f->yc - C->yc;
+		double dxk = F->xc - C->xc;
+		double dyk = F->yc - C->yc;
 		//double dzk = f->zc - C->zc;
 
 		double dphi = phi[IDX(F->id, 0, *NCELLS)] - phi[IDX(C->id, 0, *NCELLS)];
@@ -175,7 +175,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 					
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-					grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F);
+					grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F,f);
 
 					// Update Gradient at face
 					grad[IDX(0, F_idx, 3)] = grad_face[0];
@@ -205,7 +205,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-					grad2face(grad_face, &grad[3 * C_idx], &grad[3 * F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F);
+					grad2face(grad_face, &grad[3 * C_idx], &grad[3 * F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F,f);
 
 					// Update Gradient at face
 					grad[IDX(0, F_idx, 3)] = grad_face[0];
@@ -234,7 +234,7 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 			// interpolate gradient to face using Eq. (9.33)
 
 			double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
-			grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F);
+			grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F,f);
 
 			// Contribution to source term for owner cell
 			
@@ -256,18 +256,49 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 	return 0;
 }
 
-int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F)
+int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f)
 {
 	// Average gradient weights
-	double weight_C = 1. / fmax(cell_C->volume,1.e-10); // floor to prevent divide by zero
-	double weight_F = 1. / fmax(cell_F->volume,1.e-10);
-	double denom = weight_C + weight_F;
+	//double weight_C = 1. / fmax(cell_C->volume,1.e-10); // floor to prevent divide by zero
+	//double weight_F = 1. / fmax(cell_F->volume,1.e-10);
+	//double denom = weight_C + weight_F;
+	
+	// Compute Face interplation weight
+	double dCf[3] = {
+		f->xc - cell_C->xc,
+		f->yc - cell_C->yc,
+		f->zc - cell_C->zc
+	}; // position vector from cell C centroid to face f centroid
+
+	double dfF[3] = {
+		cell_F->xc - f->xc,
+		cell_F->yc - f->yc,
+		cell_F->zc - f->zc,
+	}; // position vector from face f centroid to cell F centroid
+
+	double S[3] = {
+		f->Sx,
+		f->Sy,
+		f->Sz
+	}; // Face area vector
+
+	double S_mag = mag(S); //face area magnitude
+
+	double ef[3] = {
+		S[0]/S_mag,
+		S[1]/S_mag,
+		S[2]/S_mag
+	}; //Face normal vector 
+
+	// Face interpolation factor based on normal distances
+	double weight_C = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
+	double weight_F = 1 - weight_C;
 
 	// Compute average gradient at face
 	double grad_face_avg[3] = {
-		(grad_C[0]*weight_C + grad_F[0]*weight_F) / denom,
-		(grad_C[1]*weight_C + grad_F[1]*weight_F) / denom,
-		(grad_C[2]*weight_C + grad_F[2]*weight_F) / denom
+		(grad_C[0]*weight_C + grad_F[0]*weight_F),
+		(grad_C[1]*weight_C + grad_F[1]*weight_F),
+		(grad_C[2]*weight_C + grad_F[2]*weight_F)
 	}; // Average gradient at face
 
 	double eCF[3] = { rCF[0] / dCF, rCF[1] / dCF, rCF[2] / dCF }; // Unit vector from cell C to cell F

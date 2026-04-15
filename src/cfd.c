@@ -16,21 +16,13 @@
 int main(void)
 {	
 	/*----------------------Grid Input Filename------------------*/
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\gmsh_grid.vtk"; //Home PC path
-	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\gmsh_grid.vtk"; //Lab PC path
-	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\1dN128.vtk"; // problem 1 grid 1
-	//const char* filename = "C:\\Users\\jvolponi0552\\Documents\\GitHub\\cfd-solver\\2dN128x128_tri.vtk";
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\1dN16.vtk";
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p4_N63x15.vtk";
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
+	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
 
 	/*-----------------------------------------------------------*/
 	// Output file name
-	//const char* out_fname = "output_file.vtk";
-	//const char* out_fname = "p1N16_out.vtk";
-	//const char* out_fname = "p5_128x128.vtk";
-	//const char* out_fname = "p4_63x15_out.vtk";
-	const char* out_fname = "32x8_named.vtk";
+	const char* out_fname = "p5_8x2_tri_out.vtk";
+	//const char* out_fname = "32x8_named.vtk";
 
 	// Load grid
 	node* nodes;
