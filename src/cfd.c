@@ -16,25 +16,25 @@
 int main(void)
 {	
 	/*----------------------Grid Input Filename------------------*/
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
+	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
 
 	/*-----------------------------------------------------------*/
 	// Output file name
-	const char* out_fname = "p5_8x2_tri_out.vtk";
-	//const char* out_fname = "32x8_named.vtk";
+	//const char* out_fname = "p5_8x2_tri_out.vtk";
+	const char* out_fname = "32x8_named_out.vtk";
 
 	// Load grid
 	node* nodes;
 	cell* cells; 
 	face* faces;
+	cellEntity* cellEntities;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4, NSOLCELLS = 0;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4, NSOLCELLS = 0, NENTITIES = 0;
 
 
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
-	int err = read_grid(filename, &nodes, &cells, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS);
-
+	int err = read_grid(filename, &nodes, &cells, &cellEntities, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS, &NENTITIES);
 	NSOLCELLS = NCELLS - NDEGEN_CELLS; // Number of cells that have volume and are included in the solution
 	
 	if (err != 0)

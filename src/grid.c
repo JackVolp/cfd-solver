@@ -59,7 +59,7 @@ int get_num_faces(int vtk_type)
 
 
 // Read grid .vtk file
-int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, int* MAX_FACES, int* NDEGEN_CELLS)
+int read_grid(const char* filename, node** nodes_out, cell** cells_out, cellEntity** cellEntities_out, int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, int* MAX_FACES, int* NDEGEN_CELLS, int* NENTITIES)
 {
 	// pass pointer as double pointer to allow modification of caller's pointer to nodes and cells arrays
 
@@ -84,9 +84,15 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	int ctidx = 0; // Cell type index
 	int ceidx = 0; // Cell entity index
 
+	int entity_id_old = -1; // Variable to count number of entities
+	int entity_capactiy = 5; // Initial capacity for cell entities array
+	int entity_start_idx = 0; // Starting index for current entity cell IDs in cellEntities array
+
 	// Create Null Pointers for nodes and cells, will allocate memory after reading number of points and cells
 	node* nodes = NULL;
 	cell* cells = NULL;
+	cellEntity* cellEntities = NULL;
+	int cells_capacity = 10; // Initial number of cells in entity, will realloc if needed
 
 	// Initialize MAX_FACES
 	*MAX_FACES = 0;
@@ -161,6 +167,13 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			points_section = false;
 			cells_section = false;
 
+			cellEntities = malloc(entity_capactiy * sizeof(cellEntity));
+			if (cellEntities == NULL)
+			{
+				fprintf(stderr, "Error: Memory allocation failed for cellEntities array.\n");
+				fclose(fp);
+				return 2; // Exit with error code
+			}
 			ceidx = 0; // Reset cell entity index for reading cell entity data
 			continue;
 		}
@@ -252,17 +265,84 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 			int entity_id;
 			if (sscanf(line, "%d", &entity_id) == 1)
 			{
+
 				cells[ceidx].entity_id = entity_id;
+
+				if (entity_id != entity_id_old) // If new entity id, increment number of boundaries
+				{
+					// Increment number of entities
+					(*NENTITIES)++;
+
+					cells_capacity = 10; // Reset initial capacity for new entity
+					entity_start_idx = ceidx; // Update starting index for current entity cell IDs in cellEntities array
+
+					// Populate cellEntities array
+					cellEntities[*NENTITIES-1].id = entity_id;
+
+					cellEntities[*NENTITIES-1].num_cells = 0; // Initialize number of cells in the entity
+
+					cellEntities[*NENTITIES-1].cell_ids = malloc(cells_capacity * sizeof(int));
+					if (cellEntities[*NENTITIES-1].cell_ids == NULL)
+					{
+						fprintf(stderr, "Error: Memory allocation failed for cell_ids array in cellEntities.\n");
+						fclose(fp);
+						free_grid(nodes, cells, NULL, cidx, 0);
+						free_cell_entities(cellEntities, *NENTITIES-1);
+						return 2; // Exit with error code
+					}				
+
+					
+
+					//// If capacity of cellEntities is reached, double the size
+					//if (*NENTITIES-1 >= entity_capactiy)
+					//{
+					//	entity_capactiy *= 2; // Double capacity if needed 
+					//	cellEntity* tmp = realloc(cellEntities, (size_t)entity_capactiy * sizeof(cellEntity));
+					//	if (tmp == NULL)
+					//	{
+					//		fprintf(stderr, "Error: Memory reallocation failed for cellEntities array.\n");
+					//		fclose(fp);
+					//		free_grid(nodes, cells, NULL, cidx, 0);
+					//		free_cell_entities(cellEntities, *NENTITIES);
+					//		return 2; // Exit with error code
+					//	}
+					//	cellEntities = tmp;
+					//}			
+				}
+
+				// Append to cell_ids list
+				cellEntities[*NENTITIES-1].cell_ids[ceidx - entity_start_idx] = cells[ceidx].id; // Add current cell to entity's cell list
+				cellEntities[*NENTITIES-1].num_cells++; // Increment number of cells in the entity
+
+				// if capacity of cell_ids array is reached, double the size
+				if (cellEntities[*NENTITIES-1].num_cells >= cells_capacity)
+				{
+					cells_capacity *= 2; // Double capacity if needed 
+					int* tmp = realloc(cellEntities[*NENTITIES-1].cell_ids, (size_t)cells_capacity * sizeof(int));
+					if (tmp == NULL)
+					{
+						fprintf(stderr, "Error: Memory reallocation failed for cell_ids array in cellEntities.\n");
+						fclose(fp);
+						return 2; // Exit with error code
+					}
+					cellEntities[*NENTITIES-1].cell_ids = tmp;
+				}
+
+				// Update stuff for processing the next line
+				entity_id_old = entity_id; // Update
+				ceidx++; // only update index when you get to the actual entity values 
 			}
 			else if (strcmp(line, "SCALARS CellEntityIds int 1\n") == 0);
 			else if (strcmp(line, "LOOKUP_TABLE default\n") == 0);
 			else
 			{
+				fclose(fp);
+				free_grid(nodes, cells, NULL, cidx, 0);
 				fprintf(stderr, "Error reading CellEntityIds data\n");
 				return 1;
 			}
 
-			ceidx++;
+
 		}
 	}
 
@@ -272,13 +352,28 @@ int read_grid(const char* filename, node** nodes_out, cell** cells_out, int* NPO
 	//Release memory on error 
 	if (nodes && pidx != *NPOINTS) { free_grid(nodes, cells, NULL, cidx, 0); return 11; }
 	if (cells && cidx != *NCELLS) { free_grid(nodes, cells, NULL, cidx, 0); return 12; }
+	if (cellEntities && ceidx != *NCELLS) { free_grid(nodes, cells, NULL, cidx, 0); free(cellEntities); return 13; }
 
 	// Set output pointers
 	*nodes_out = nodes;
 	*cells_out = cells;
+	*cellEntities_out = cellEntities;
 
 	return 0; // Success
 
+}
+
+// Free cellEntities array and all its cell_ids arrays
+void free_cell_entities(cellEntity* cellEntities, int nentities)
+{
+	if (cellEntities)
+	{
+		for (int i = 0; i < nentities; ++i)
+		{
+			free(cellEntities[i].cell_ids);
+		}
+		free(cellEntities);
+	}
 }
 
 // Free Grid related variables from memory function 

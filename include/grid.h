@@ -65,9 +65,8 @@ typedef struct node {
 
 typedef struct cellEntity {
 	int id; // Cell Entity id
-	char name[256]; // Cell Entity name
-
 	int* cell_ids; // Array of cell ids that belong to the entity
+	int num_cells; // Number of cells in the entity
 } cellEntity;
 
 typedef struct cell {
@@ -98,13 +97,17 @@ typedef struct face {
 }face;
 
 int read_grid(const char* filename, //grid filename INPUT
-	node** nodes_out, 
+	node** nodes_out,
 	cell** cells_out,
+	cellEntity** cellEntities_out,
 	int* NPOINTS,
 	int* NCELLS,
 	int* CELL_LIST_SIZE,
 	int* MAX_FACES,
-	int* NDEGEN_CELLS);
+	int* NDEGEN_CELLS,
+	int* NENTITIES);
+
+void free_cell_entities(cellEntity* cellEntities, int nentities);
 
 void free_grid(node* nodes,
 	cell* cells,
