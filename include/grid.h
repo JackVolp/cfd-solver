@@ -39,6 +39,7 @@ enum {
 	VTK_HEXAGONAL_PRISM = 16,
 };
 
+
 typedef union boundaryData {
 	double q_b; // Neumann boundary condition value (flux)
 	struct {
@@ -126,6 +127,8 @@ int build_boundary_face(cell* c, face* faces, node* nodes, cell* cells, int k, i
 int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx);
 
 int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES);
+
+int build_boundary_entity(boundary* b, int id, boundaryType type, boundaryData bData, cellEntity* entity, face* faces, int* NFACES);
 
 int build_faces_and_cells(node* nodes,
 	cell* cells,

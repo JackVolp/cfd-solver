@@ -119,14 +119,23 @@ int main(void)
 		{.phi_b = 100.}
 	};
 
-	for (int i = 0; i < NBOUNDARIES; i++)
+	/*for (int i = 0; i < NBOUNDARIES; i++)
 	{
 		int endpoints[2];
 		endpoints[0] = i;
 		endpoints[1] = (i+1) % (NBOUNDARIES); 
 		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i],p1_boundary_data[i], nodes, faces, &NFACES);
-	}
+	}*/
 	
+	for (int i = 0; i < NENTITIES-1; i++)
+	{
+		if (cellEntities[i].id != 9)
+		{
+			//build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
+			build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], &cellEntities[i], faces, &NFACES);
+		}
+	}
+
 	// ------------Solver Loop---------------------------
 	printf("Start Solving \n");
 	for (int i = 0; i < MAX_ITER; i++)

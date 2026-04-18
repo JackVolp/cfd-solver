@@ -815,7 +815,6 @@ int calculate_FC_AV(face* f, cell* c_owner, cell* c_neighbor, node* nodes, int* 
 
 int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES)
 {
-
 	int initial_capacity = 10; // Initial capacity for face_ids array
 
 	b->id = id;
@@ -908,6 +907,52 @@ int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, bound
 	b->data = bData;
 	return 0;
 }
+
+// Replacement function for build_boundary that builds the boundary based on a cell entitiy instead of a line segment.
+int build_boundary_entity(boundary* b, int id, boundaryType type, boundaryData bData, cellEntity* entity, face* faces, int* NFACES)
+{
+	b->id = id;
+	b->type = type;
+	b->data = bData;
+
+	int initial_capacity = 10; // Initial capacity for face_ids array
+	// initialize face ids
+	b->face_ids = NULL;
+	b->face_ids = malloc(initial_capacity * sizeof(int)); // Will realloc later based on number of faces found
+	b->num_faces = 0;
+
+	// Loop over all cells in the entity and find faces that have that degenerate cell as a neighbor.
+	// Loop over all faces to find if all the faces whose neighbor is the current entity id
+	for (int i = 0; i < *NFACES; i++)
+	{
+		for (int j = 0; j < entity->num_cells; j++)
+		{
+			if (faces[i].neighbor == entity->cell_ids[j]) // if face neighbor is the degenerate cell on the boundary
+			{
+				// Check if we need to realloc face_ids array
+				if (b->num_faces >= initial_capacity)
+				{
+					initial_capacity *= 2;
+					int* tmp = realloc(b->face_ids, initial_capacity * sizeof(int));
+					if (tmp == NULL)
+					{
+						fprintf(stderr, "Error reallocating memory for boundary face ids\n");
+						free(b->face_ids);
+						return 2;
+					}
+					b->face_ids = tmp;
+				}
+				b->face_ids[b->num_faces] = faces[i].id;
+				faces[i].boundary_id = b->id; // Set the boundary id for the face
+				b->num_faces++;
+				break; // No need to check other cells in the entity for this face
+			}
+		}
+	}
+
+	return 0;
+}
+
 
 // Math Helper functions (maybe move to separate heade
 // Comparison function, must return negative if *a is less than *b
