@@ -291,8 +291,8 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 	}; //Face normal vector 
 
 	// Face interpolation factor based on normal distances
-	double weight_F = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
-	double weight_C = 1 - weight_F;
+	double weight_C = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
+	double weight_F = 1 - weight_C;
 
 	// Compute average gradient at face
 	double grad_face_avg[3] = {
