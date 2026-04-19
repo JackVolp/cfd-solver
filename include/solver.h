@@ -7,6 +7,14 @@
 #include "constants.h"
 #include "math_helpers.h"
 
+typedef enum advectionScheme {
+	UPWIND = 0,
+	CD = 1,
+	QUICK = 2,
+	SMART = 3,
+	BOUNDED_CD = 4
+} advectionScheme;
+
 /* Indexing macros (row major)*/
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
 //#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
