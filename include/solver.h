@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "grid.h"
-#include "constants.h"
+#include "setup.h"
 #include "math_helpers.h"
 
 typedef enum advectionScheme {
@@ -26,6 +26,8 @@ typedef enum advectionScheme {
 int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad);
 
 int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+
+int build_advection(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 
 int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F,cell* cell_C, cell* cell_F, face* f);
 

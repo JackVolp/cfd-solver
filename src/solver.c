@@ -1,5 +1,6 @@
 
 #include "solver.h"
+#include "setup.h"
 
 int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 	int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
@@ -167,7 +168,9 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 			double Sf_mag = mag(((double[3]){ f->Sx, f->Sy, f->Sz }));
  // Magnitude of surface area vector of face
 
-			switch (boundaries[f->boundary_id].type)
+			boundary bound = boundaries[f->boundary_id];
+
+			switch (bound.type)
 			{
 				case Dirichlet: {
 					
@@ -189,7 +192,9 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 				}
 				case Neumann: {
 					// Nothing needs to be done to coefficients for neumann as long as the source term has already been initialized prior. I.e, b has Q_c*V_c added to it already.
-					double q_b = boundaries[f->boundary_id].data.q_b; // Neumann boundary condition value (flux)									
+
+					double q_b = bound.data.q_b(&bound, f, 0.0);
+					//double q_b = boundaries[f->boundary_id].data.q_b; // Neumann boundary condition value (flux)									
 
 					double fluxVb = q_b * Sf_mag; // Flux contribution from boundary condition, positive since we are adding it to the source term on the right hand side of the equation
 
@@ -197,8 +202,8 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 					break;
 				}
 				case Robin: {
-					double h_inf = boundaries[f->boundary_id].data.robin.h_inf;
-					double phi_inf = boundaries[f->boundary_id].data.robin.phi_inf;
+					double h_inf = bound.data.robin.h_inf(&bound, f, 0.0); 
+					double phi_inf = bound.data.robin.phi_inf(&bound, f, 0.0);
 
 					double fluxCb = (h_inf * Sf_mag * GAMMA * gDiff_b)
 						/ (h_inf * Sf_mag + GAMMA * gDiff_b); // Coefficient for phi at owner cell in Robin boundary condition eq. 8.87
@@ -255,6 +260,12 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 
 	return 0;
 }
+
+int build_advection(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+{
+	return 0;
+}
+
 
 int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f)
 {
@@ -332,8 +343,14 @@ int applyBoundary(boundary* b, cell* cells,
 		switch (b->type)
 		{
 		case Dirichlet:
+			if (b->entity_id == 8)
+			{
+				printf("inlet\n");
+			}
 			// For Dirichlet, we can set the boundary value directly
-			phi[phi_face_idx] = b->data.phi_b; // Set phi at owner cell to boundary value
+			phi[phi_face_idx] = b->data.phi_b(b,f,0.0); // Set phi at owner cell to boundary value
+
+			
 			break;
 		case Neumann: {
 			// magnitude of surface area vector
@@ -350,16 +367,27 @@ int applyBoundary(boundary* b, cell* cells,
 
 			double gDiff = Ef_mag / d_CF; // "Geometric Diffusion Coefficient"
 
-			phi[phi_face_idx] = (GAMMA * gDiff * phi[phi_owner_idx] - b->data.q_b)
-				/ (GAMMA * gDiff); // Eq 8.42 from textbook
+			// Reduces to phi_b = phi_C for q_b = 0 (zero flux/outlet condition)
+			double q_b = b->data.q_b(b, f, 0.0);
+
+			if (GAMMA != 0.0)
+			{
+				phi[phi_face_idx] = (GAMMA * gDiff * phi[phi_owner_idx] - q_b)
+					/ (GAMMA * gDiff); // Eq 8.42 from textbook
+			}
+			else // for advection only case
+			{
+				phi[phi_face_idx] = phi[phi_owner_idx];
+			}
+			
 			break;
 		}
 		case Robin: {
 			// For Robin, we need to calculate the equivalent boundary value based on the given phi_b, q_b, and h_infty
 			// Ignore cross diffusion term for initialization? maybe. Dont have gradient at face yet
 
-			double h_inf = b->data.robin.h_inf;
-			double phi_inf = b->data.robin.phi_inf;
+			double h_inf = b->data.robin.h_inf(b, f, 0.0);
+			double phi_inf = b->data.robin.phi_inf(b, f, 0.0);;
 
 			// magnitude of surface area vector
 			double Ef[3] = { f->Ex, f->Ey, f->Ez }; // Surface area vector of face

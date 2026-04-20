@@ -6,7 +6,7 @@ find_package(MKL CONFIG REQUIRED PATHS $ENV{MKLROOT})
 
 add_executable(cfd
   "src/cfd.c"
- "src/grid.c" "src/math_helpers.c" "include/math_helpers.h" "include/solver.h" "src/solver.c")
+ "src/grid.c" "src/math_helpers.c" "include/math_helpers.h" "include/solver.h" "src/solver.c" "src/setup.c")
 
  target_include_directories(cfd PRIVATE include)
  target_link_libraries(cfd PUBLIC MKL::MKL)

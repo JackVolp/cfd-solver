@@ -9,20 +9,22 @@
 #include "grid.h"
 #include "cfd.h"
 #include "solver.h"
-#include "constants.h"
+#include "setup.h"
 #include "math_helpers.h"
 
 
 int main(void)
 {	
-	/*----------------------Grid Input Filename------------------*/
+	/* -------------------------------------------------------------------------- */
+	/* Grid input file name */
+	/* -------------------------------------------------------------------------- */
 	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
-
-	/*-----------------------------------------------------------*/
-	// Output file name
-	//const char* out_fname = "p5_8x2_tri_out.vtk";
-	const char* out_fname = "32x8_named_out.vtk";
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
+	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_20x20.vtk";
+	/* -------------------------------------------------------------------------- */
+	/* Output file name */
+	/* -------------------------------------------------------------------------- */
+	const char* out_fname = "hw2_20x20_out.vtk";
 
 	// Load grid
 	node* nodes;
@@ -33,6 +35,7 @@ int main(void)
 	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4, NSOLCELLS = 0, NENTITIES = 0;
 
 
+	/*----------Read grid from .vtk grid file----------*/
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
 	int err = read_grid(filename, &nodes, &cells, &cellEntities, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS, &NENTITIES);
 	NSOLCELLS = NCELLS - NDEGEN_CELLS; // Number of cells that have volume and are included in the solution
@@ -46,8 +49,8 @@ int main(void)
 	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
 	err = build_faces_and_cells(nodes, cells, &NCELLS, &MAX_FACES, &NFACES,&faces);
 
-	int NEQNS = 1; // Number of transport equations solved
 
+	/*----------Allocate Arrays----------*/
 	// Allocate conservative scalars
 	double* phi = malloc((NEQNS * NCELLS) * sizeof(double));
 	if (phi == NULL)
@@ -74,6 +77,7 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
+	/*--------Setup matrix arrays and solver parameters--------*/
 	lapack_int n = NSOLCELLS; // Number of equations (size of the system)
 	lapack_int nrhs = 1; // Number of right-hand sides (columns of B)
 	lapack_int lda = NSOLCELLS; // Leading dimension of A
@@ -103,21 +107,32 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
+	/*--------Initialize Phi--------*/
 	// initialize phi to 0 everywhere
 	memset(phi, 0, (NEQNS * NCELLS) * sizeof(double));
 
 	// initialize grad to zero
 	memset(grad, 0, ((int)3 * NCELLS) * sizeof(double));
 
+	/*-------- Create and apply boundary conditions--------*/
 	// Initialize boundaries (change to allocate for more complex gemoetry)
-	boundary boundaries[4]; // boundaries
-	boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
-	boundaryData p1_boundary_data[4] = {
+	boundary boundaries[3]; // boundaries
+	boundaryType hw2_boundaries[3] = { Dirichlet, Neumann, Dirichlet };
+
+	//boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
+	/*boundaryData p1_boundary_data[4] = {
 		{.q_b = 0.0},
 		{.robin = {.h_inf = 100.0, .phi_inf = 25.}},
 		{.q_b = 0.0},
 		{.phi_b = 100.}
+	};*/
+
+	boundaryData hw2_boundary_data[3] = {
+		{.phi_b = (*phi0_boundary)},
+		{.q_b = (*zero_flux)},
+		{.phi_b = (*inlet_profile)}
 	};
+
 
 	/*for (int i = 0; i < NBOUNDARIES; i++)
 	{
@@ -132,12 +147,27 @@ int main(void)
 		if (cellEntities[i].id != 9)
 		{
 			//build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
-			build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], &cellEntities[i], faces, &NFACES);
+			build_boundary_entity(&boundaries[i], i, hw2_boundaries[i], hw2_boundary_data[i], &cellEntities[i], faces, &NFACES);
 		}
 	}
 
-	// ------------Solver Loop---------------------------
+	/* -------------------------------------------------------------------------- */
+	/* Solver Loop */
+	/* -------------------------------------------------------------------------- */
 	printf("Start Solving \n");
+
+	// Apply boundary conditions (sets phi on boundaries)
+	for (int j = 0; j < NBOUNDARIES; j++)
+	{
+		err = applyBoundary(&boundaries[j], cells, faces, phi, grad, &NCELLS);
+
+		if (err != 0)
+		{
+			fprintf(stderr, "initBoundary failed with error code %d\n", err);
+			return 1;
+		}
+	}
+
 	for (int i = 0; i < MAX_ITER; i++)
 	{
 		// Save old phi
@@ -345,6 +375,7 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 		}
 	}
 
+
 	// Write cell types
 	fprintf(fp, "CELL_TYPES %d\n", *NCELLS);
 	for (int i = 0; i < *NCELLS; i++)
@@ -362,6 +393,15 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	{
 		fprintf(fp, "%d\n", (*cells)[i].id);
 	}
+
+	// Cell Entity Ids
+	fprintf(fp, "SCALARS CellEntityIds int 1\n");
+	fprintf(fp, "LOOKUP_TABLE default\n");
+	for (int i = 0; i < *NCELLS; i++)
+	{
+		fprintf(fp, "%d\n", (*cells)[i].entity_id);
+	}
+
 
 	// Phi
 	fprintf(fp, "SCALARS phi[%d] double 1\n", 0);

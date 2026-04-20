@@ -10,12 +10,7 @@
 #include "math_helpers.h"
 
 
-// Boundary Types
-typedef enum boundaryType{
-	Dirichlet = 0,
-	Neumann = 1,
-	Robin = 2,
-}boundaryType;
+
 
 // Cell Types
 enum {
@@ -40,24 +35,6 @@ enum {
 };
 
 
-typedef union boundaryData {
-	double q_b; // Neumann boundary condition value (flux)
-	struct {
-		double h_inf; // Robin boundary condition coefficient
-		double phi_inf; // Robin boundary condition ambient temperature
-	} robin;
-	double phi_b; // Dirichlet boundary condition value (temperature)
-} boundaryData;
-
-typedef struct boundary {
-	int id; // Surface ID
-	int endpoints[2]; // Endpoints of the surface (if applicable)
-	int num_faces; // Number of faces in the surface
-	int* face_ids; // Array of face IDs that define the surface
-	boundaryType type; // Boundary condition type (Dirichlet, Neumann, Robin)
-	// The conditional information if from ai, i havent read about how unions/ shared memory stuff works
-	boundaryData data; // Union to hold boundary condition data (e.g., value for Dirichlet, flux for Neumann, coefficients for Robin)
-} boundary;
 
 typedef struct node {
 	double x, y, z; // Node coordinates
@@ -96,6 +73,41 @@ typedef struct face {
 	double Ex, Ey, Ez; // orthogonal contribution
 	double Tx, Ty, Tz; // tangential contribution
 }face;
+
+// Boundary Types
+typedef enum boundaryType {
+	Dirichlet = 0, //specified value, e.g. fixed temperaute, no slip etc
+	Neumann = 1, // 
+	Robin = 2
+}boundaryType;
+
+// Function pointer type for boundary condition profiles
+// defines a type called BC_PROFILE that is a pointer to a function that returns a double, and takes the inputs (const boundary* b, const face* f, double t)
+typedef struct boundary boundary;
+
+typedef double (*BC_PROFILE)(const boundary* b, const face* f, double t);
+
+typedef union boundaryData {
+	BC_PROFILE q_b; // Neumann boundary condition value (flux)
+	struct {
+		BC_PROFILE h_inf; // Robin boundary condition coefficient
+		BC_PROFILE phi_inf; // Robin boundary condition ambient temperature
+	} robin;
+	BC_PROFILE phi_b; // Dirichlet boundary condition value (temperature)
+} boundaryData;
+
+typedef struct boundary {
+	int id; // Surface ID
+	int endpoints[2]; // Endpoints of the surface (if applicable)
+	int num_faces; // Number of faces in the surface
+	int* face_ids; // Array of face IDs that define the surface
+	int entity_id; //id of the cell entity that boundary is attatched to
+
+	boundaryType type; // Boundary condition type (Dirichlet, Neumann, Robin)
+	// The conditional information if from ai, i havent read about how unions/ shared memory stuff works
+	boundaryData data; // Union to hold boundary condition data (e.g., value for Dirichlet, flux for Neumann, coefficients for Robin)
+	void* bc_params; //optional parameters related to the boundaryData function
+} boundary;
 
 int read_grid(const char* filename, //grid filename INPUT
 	node** nodes_out,
