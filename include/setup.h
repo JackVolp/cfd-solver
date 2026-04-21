@@ -8,7 +8,7 @@
 // Solver parameters
 #define STOP_COND 1e-15
 #define RPRT_INTERVAL 1
-#define MAX_ITER 0
+#define MAX_ITER 10
 
 // Problem Setup
 #define transient false
@@ -17,11 +17,17 @@
 
 // Physical constants
 //Thermal Diffusivity of aluminum at room temperature (m^2/s)
-#define GAMMA 1
+//#define GAMMA 1
+#define GAMMA 0 //set diffusion to zero for pure advection
+#define RHO 1 //Density
 
 // Source Term
-#define Q_C(x,y,z) (10.*x + 5.)
-//#define Q_C(x,y,z) (0)
+//#define Q_C(x,y,z) (10.*x + 5.)
+#define Q_C(x,y,z) (0)
+
+// Velocity Field
+#define U 1.0 //x-velocity
+#define V 1.0 //y-velocity
 
 // Boundary profiles
 double inlet_profile(const boundary* b, const face* f, double t);

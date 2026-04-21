@@ -1,6 +1,7 @@
 
 #include "solver.h"
 #include "setup.h"
+#include <math.h>
 
 int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 	int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
@@ -248,6 +249,9 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 		}
 	}
 
+	/* -------------------------------------------------------------------------- */
+	/* Move this section below (init b) to its own function called build source */
+	/* -------------------------------------------------------------------------- */
 	//initialize b with the energy source term for all cells
 	for (int i = 0; i < NSOLCELLS; i++)
 	{
@@ -263,6 +267,58 @@ int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, c
 
 int build_advection(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
+
+	//Loop over all faces
+	for (int i = 0; i < *NFACES; i++)
+	{
+		face* f = &faces[i];
+		cell* cell_C = &cells[f->owner];
+		cell* cell_F = &cells[f->neighbor];
+
+		int C_idx = cell_C->id; // Index for owner cell in A and b arrays
+		int F_idx = cell_F->id; // Index for neighbor cell in A and b arrays
+
+		int Csol_idx = C_idx - *NDEGEN_CELLS; // Index for owner cell in phi and grad arrays (only volume cells are included in solution)
+
+		int Fsol_idx = F_idx - *NDEGEN_CELLS; // Index for neighbor cell in phi and grad arrays (only volume cells are included in solution)
+
+		/* -------------------------------------------------------------------------- */
+		/* Calculate Face mass flow rate */
+		/* -------------------------------------------------------------------------- */
+		// Positive is mdot_f is in direction of Sf
+		double v[3] = { U, V, 0.0 }; //velocity vector
+		double Sf[3] = { f->Sx, f->Sy, f->Sz };
+
+		double mdot_f = RHO * dot(v, Sf); //Mass flow through face
+		double Sf_mag = mag(Sf);
+
+		if (f->boundary_face)
+		{
+			// For outflow case (mdotf will be positive), normal contribution 
+			A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
+
+			//inflow case (mdotf is negative), boundary flux added to RHS
+			b[Csol_idx] += fmax(-mdot_f, 0) * phi[F_idx];
+		}
+		else
+		{
+			//Assign contribution to owner cell
+			A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
+			A[IDX(Csol_idx, Fsol_idx, NSOLCELLS)] += -fmax(-mdot_f, 0.0);
+
+			//Assign contributions to neighbor cell
+			A[IDX(Fsol_idx, Fsol_idx, NSOLCELLS)] += fmax(-mdot_f, 0.0);
+			A[IDX(Fsol_idx, Csol_idx, NSOLCELLS)] += -fmax(mdot_f, 0.0);
+
+			//Assign Source term/RHS contributions (replace with
+			// function that changes for a selected scheme)
+			b[Csol_idx] += 0.0;
+			b[Fsol_idx] += 0.0;
+		}
+
+
+	}
 	return 0;
 }
 
@@ -343,14 +399,9 @@ int applyBoundary(boundary* b, cell* cells,
 		switch (b->type)
 		{
 		case Dirichlet:
-			if (b->entity_id == 8)
-			{
-				printf("inlet\n");
-			}
 			// For Dirichlet, we can set the boundary value directly
 			phi[phi_face_idx] = b->data.phi_b(b,f,0.0); // Set phi at owner cell to boundary value
 
-			
 			break;
 		case Neumann: {
 			// magnitude of surface area vector

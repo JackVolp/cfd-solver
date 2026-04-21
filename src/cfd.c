@@ -206,6 +206,13 @@ int main(void)
 			return 1;
 		}
 
+		err = build_advection(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		if (err != 0)
+		{
+			fprintf(stderr, "build_advection failed wiht error code %d\n", err);
+			return 1;
+		}
+
 		// Solve Linear System A*phi = b for phi
 		lapack_int info = LAPACKE_dgesv(LAPACK_COL_MAJOR, n, nrhs, A, lda, ipiv, b, ldb);
 		if (info != 0)
