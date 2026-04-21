@@ -3,7 +3,9 @@
 #define SETUP_H
 
 #include <stdbool.h>
-#include <grid.h>
+#include "grid.h"
+//#include "solver.h"
+
 
 // Solver parameters
 #define STOP_COND 1e-15
@@ -14,6 +16,18 @@
 #define transient false
 #define CFL 0.5 // CFL number, only used when transient
 #define NEQNS 1 // Number of transport equations solved
+
+// Possible advection Schemes user can choose 
+typedef enum advectionScheme {
+	UPWIND = 0,
+	CD = 1,
+	QUICK = 2,
+	SMART = 3,
+	BOUNDED_CD = 4,
+	SOU = 5
+} advectionScheme;
+
+extern advectionScheme ADVECTION_SCHEME;
 
 // Physical constants
 //Thermal Diffusivity of aluminum at room temperature (m^2/s)
@@ -26,8 +40,8 @@
 #define Q_C(x,y,z) (0)
 
 // Velocity Field
-#define U 1.0 //x-velocity
-#define V 1.0 //y-velocity
+#define XVEL 1.0 //x-velocity
+#define YVEL 1.0 //y-velocity
 
 // Boundary profiles
 double inlet_profile(const boundary* b, const face* f, double t);

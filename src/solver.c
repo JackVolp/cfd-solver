@@ -287,7 +287,7 @@ int build_advection(double* A, double* b, double* phi, double* grad, node* nodes
 		/* Calculate Face mass flow rate */
 		/* -------------------------------------------------------------------------- */
 		// Positive is mdot_f is in direction of Sf
-		double v[3] = { U, V, 0.0 }; //velocity vector
+		double v[3] = { XVEL, YVEL, 0.0 }; //velocity vector
 		double Sf[3] = { f->Sx, f->Sy, f->Sz };
 
 		double mdot_f = RHO * dot(v, Sf); //Mass flow through face
@@ -303,6 +303,7 @@ int build_advection(double* A, double* b, double* phi, double* grad, node* nodes
 		}
 		else
 		{
+			
 			//Assign contribution to owner cell
 			A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
 			A[IDX(Csol_idx, Fsol_idx, NSOLCELLS)] += -fmax(-mdot_f, 0.0);
@@ -315,6 +316,14 @@ int build_advection(double* A, double* b, double* phi, double* grad, node* nodes
 			// function that changes for a selected scheme)
 			b[Csol_idx] += 0.0;
 			b[Fsol_idx] += 0.0;
+
+			// Calculate phi at the face based on higher order scheme
+			double phi_f_U = phi2face(phi[C_idx], phi[F_idx], mdot_f, grad, cell_C, cell_F, f, UPWIND); // upwind scheme face value
+			double phi_f_HO = phi2face(phi[C_idx], phi[F_idx], mdot_f, grad, cell_C, cell_F, f, ADVECTION_SCHEME); //high order face value
+
+			// Add high order scheme contribution to cell RHS
+			b[Csol_idx] += -mdot_f * (phi_f_HO - phi_f_U);
+			b[Fsol_idx] += mdot_f * (phi_f_HO - phi_f_U);
 		}
 
 
@@ -494,4 +503,111 @@ int maxChng(double* phi, double* phi_old, int* NCELLS, int* NDEGEN_CELLS, double
 
 	*epsilon = max_change;
 	return 0;
+}
+
+double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
+	double* grad, cell* owner, cell* neighbor, face* f, advectionScheme scheme)
+{
+	double phi_f_tilde = 0.0; //normalized phi value at face
+	double phi_f = 0.0; //phi value at face
+
+	// Upwind, Downwind, and far upwind cells and phi values (far upwind is not real cell)
+	double phi_C;
+	double phi_D;
+	double phi_U;
+	cell* C;
+	cell* D;
+
+	//Determine upwind (phi_C), downwind (phi_D), and far upwind (phi_U) cell
+	if (mdot_f == 0 || phi_owner == phi_neighbor)
+	{
+		// if there is no mass flux or if phi_C = phi_D, then 
+		// there should be no change for phi at the face
+		phi_f = phi_owner;
+		return phi_f;
+	}
+
+	if (mdot_f > 0)
+	{
+		// if mass flow is positive (flow going out from owner, owner is upstream)
+		phi_C = phi_owner;
+		phi_D = phi_neighbor;
+		C = owner;
+		D = neighbor;
+	}
+	else
+	{
+		// otherwise mass flow is negative (flow going from neighbor to owner
+		// neighbor is upstream)
+		phi_C = phi_neighbor;
+		phi_D = phi_owner;
+		C = neighbor;
+		D = owner;
+	}
+
+	// Calculate dCD vector
+	double dCD[3] = {
+		D->xc - C->xc,
+		D->yc - C->yc,
+		D->zc - C->zc };
+
+	//get gradient at upwind cell
+	double grad_C[3] = {
+		grad[3 * C->id],
+		grad[3 * C->id + 1],
+		grad[3 * C->id + 2]
+	};
+
+	// Extrapolate to get far upwind value
+	phi_U = phi_D - 2 * dot(grad_C, dCD);
+
+	// Compute normalized phi_C
+	double phi_C_tilde = (phi_C - phi_U) / (phi_D - phi_U);
+
+	// Determine phi_f_tilde based on advection scheme
+	switch (scheme) {
+	case UPWIND: 
+		phi_f_tilde = phi_C_tilde;
+		break;
+	case CD:
+		phi_f_tilde = 0.5 * (1 + phi_C_tilde);
+		break;
+	case QUICK:
+		phi_f_tilde = 3. / 8. + 3. / 4. * phi_C_tilde;
+		break;
+	case SMART:
+		if (phi_C_tilde >= 0.0 && phi_C_tilde <= 5. / 6.)
+		{
+			phi_f_tilde = 3. / 8. + 3. / 4. * phi_C_tilde;
+		}
+		else if (5. / 6. < phi_C_tilde && phi_C_tilde <= 1.)
+		{
+			phi_f_tilde = 1.0; 
+		}
+		else
+		{
+			phi_f_tilde = phi_C_tilde;
+		}
+		break;
+	case BOUNDED_CD:
+		if (0. <= phi_C_tilde && phi_C_tilde <= 1.0)
+		{
+			phi_f_tilde = 0.5 * phi_C_tilde + 0.5;
+		}
+		else
+		{
+			phi_f_tilde = phi_C_tilde;
+		}
+		break;
+	case SOU:
+		phi_f_tilde = 3. / 2. * phi_C_tilde;
+		break;
+	default:
+		printf(stderr, "Error: Unknown advection scheme: %d", scheme);
+		return 1;
+	}
+
+	// Compute phi_f based on phi_f_tilde 
+	phi_f = phi_f_tilde * (phi_D - phi_U) + phi_U;
+	return phi_f;
 }

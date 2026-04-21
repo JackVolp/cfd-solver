@@ -7,13 +7,7 @@
 #include "setup.h"
 #include "math_helpers.h"
 
-typedef enum advectionScheme {
-	UPWIND = 0,
-	CD = 1,
-	QUICK = 2,
-	SMART = 3,
-	BOUNDED_CD = 4
-} advectionScheme;
+
 
 /* Indexing macros (row major)*/
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
@@ -41,5 +35,14 @@ for robin phi_b and h_infty used
 */
 int applyBoundary(boundary* b, cell* cells,
 	face* faces, double* phi, double* grad, int* NCELLS);
+
+double phi2face(double phi_owner,
+	double phi_neighbor,
+	double mdot_f,
+	double* grad,
+	cell* owner,
+	cell* neighbor,
+	face* f,
+	advectionScheme scheme);
 
 #endif // !SOLVER_H

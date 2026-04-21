@@ -29,3 +29,9 @@ double zero_flux(const boundary* b, const face* f, double t)
 
 	return 0;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Advection Scheme Selection */
+/* -------------------------------------------------------------------------- */
+//advectionScheme ADVECTION_SCHEME = UPWIND;
+advectionScheme ADVECTION_SCHEME = SMART;
