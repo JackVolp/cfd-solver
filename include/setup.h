@@ -12,11 +12,6 @@
 #define RPRT_INTERVAL 1
 #define MAX_ITER 10
 
-// Problem Setup
-#define transient false
-#define CFL 0.5 // CFL number, only used when transient
-#define NEQNS 1 // Number of transport equations solved
-
 // Possible advection Schemes user can choose 
 typedef enum advectionScheme {
 	UPWIND = 0,
@@ -28,6 +23,13 @@ typedef enum advectionScheme {
 } advectionScheme;
 
 extern advectionScheme ADVECTION_SCHEME;
+
+// Problem Setup
+#define transient false
+#define CFL 0.5 // CFL number, only used when transient
+#define T_FINAL 1.0 // Final time for transient simulation
+#define NEQNS 1 // Number of transport equations solved
+
 
 // Physical constants
 //Thermal Diffusivity of aluminum at room temperature (m^2/s)

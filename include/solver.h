@@ -13,7 +13,7 @@
 //#define IDX(i,j,nx) ((j)*(nx) + (i))
 //#define IDX(i,j,eq,nx,ny) ((j)*(nx) + (i) + (eq)*(nx*ny))
 
-#define IDX(i,j,nx) ( (i) + (j*nx) ) // column major for normal arrays
+#define IDX(i,j,nx) ((i) + ((j) * (nx))) // column major for normal arrays
 //#define vecIDX(i,j,nx) ( (j)*(nx) + (i) ) //indexing for vectors stored in row major format as [x1,x2,...,xn,y1,y2,...yn,z1,z2,...zn]. nx is number of cells in this case. All the x-dirs, then all the y dirs, then all the z-dirs. I is the index of phi and j is the index of the direction (0,1,2 for x,y,z respectively)
 
 
@@ -45,4 +45,12 @@ double phi2face(double phi_owner,
 	face* f,
 	advectionScheme scheme);
 
+double calc_Residual(double* A,
+	double* b,
+	double* phi,
+	cell* cells,
+	face* faces,
+	int* NCELLS,
+	int* NDEGEN_CELLS,
+	int* NFACES);
 #endif // !SOLVER_H

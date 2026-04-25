@@ -32,7 +32,7 @@ int main(void)
 	face* faces;
 	cellEntity* cellEntities;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 4, NSOLCELLS = 0, NENTITIES = 0;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 0, NSOLCELLS = 0, NENTITIES = 0;
 
 
 	/*----------Read grid from .vtk grid file----------*/
@@ -231,7 +231,7 @@ int main(void)
 
 
 		// Stopping condition and printing change
-		double epsilon;
+		/*double epsilon;
 		err = maxChng(phi_old, phi, &NCELLS, &NDEGEN_CELLS, &epsilon);
 		if (i % RPRT_INTERVAL == 0)
 		{
@@ -242,6 +242,20 @@ int main(void)
 		{
 			printf("STOP_COND HIT after %d iterations\n",i+1);
 			printf("Max change = %g \n", epsilon);
+			break;
+		}*/
+
+		// Residual/linear system based stopping condition.
+		double residual = calc_Residual(A, b, phi, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		if (i % RPRT_INTERVAL == 0)
+		{
+			printf("ITER = %d \n", i + 1);
+			printf("Residual = %g \n", residual);
+		}
+		if (residual <= STOP_COND)
+		{
+			printf("STOP_COND HIT after %d iterations\n", i + 1);
+			printf("Residual = %g \n", residual);
 			break;
 		}
 

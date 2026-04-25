@@ -326,7 +326,6 @@ int build_advection(double* A, double* b, double* phi, double* grad, node* nodes
 			b[Fsol_idx] += mdot_f * (phi_f_HO - phi_f_U);
 		}
 
-
 	}
 	return 0;
 }
@@ -610,4 +609,53 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 	// Compute phi_f based on phi_f_tilde 
 	phi_f = phi_f_tilde * (phi_D - phi_U) + phi_U;
 	return phi_f;
+}
+
+double calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+{
+	// Residual of equation Ax=b, should go to zero as solution converges. Can be used to check for convergence and also for debugging to make sure residual is decreasing after each iteration. Note that this is not the same as epsilon which is the maximum % change in phi values between iterations, but they should be correlated.
+	double residual = 0.0;
+
+	double scaling_factor = 0.0; //scale residual globally
+
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of solution cells (non-boundary/degenerate cells)
+	
+	for (int i=0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)]; //current cell, adjust index to account for degenerate cells at beginning of cells array
+
+		double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
+		double aFphiF_sum = 0.0;
+
+		// loop over faces to sum a_i*phi_i for the cell C
+		for (int j = 0; j < C->num_faces; j++)
+		{
+			face* f = &faces[C->face_ids[j]];
+
+			if (f->owner == C->id)
+			{
+				if (f->boundary_face)
+				{
+					// For boundary faces, the neighbor cell is not included in the solution and should not be included in the residual calculation since its value is determined by the boundary condition, not by solving the linear system. So we can skip this face for the residual calculation.
+					continue;
+				}
+				double aF = A[IDX(i, f->neighbor - (*NDEGEN_CELLS), NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell F
+				aFphiF_sum += aF * phi[f->neighbor];
+			}
+			else if (f->neighbor == C->id)
+			{
+				double aF = A[IDX(i, f->owner - (*NDEGEN_CELLS), NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell F
+				aFphiF_sum += aF * phi[f->owner];
+			}
+		}
+
+
+		double res_i = aFphiF_sum + aC * phi[C->id] - b[i]; // Residual for cell C
+		residual += fabs(res_i);
+		scaling_factor += fabs(aC * phi[C->id]);
+	}
+
+	double scaled_residual = residual / fmax(scaling_factor, 1e-10); // Scale residual to prevent issues with very small or large values
+
+	return scaled_residual;
 }
