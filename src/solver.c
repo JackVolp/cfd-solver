@@ -2,6 +2,7 @@
 #include "solver.h"
 #include "setup.h"
 #include <math.h>
+#include <string.h>
 
 int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 	int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
@@ -127,7 +128,7 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 
 
 // this function also updates the gradient vector at the boundary /degenerate cell indicies with the gradients at the boundary faces. This should prob be in a different function
-int build_matrix(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 		
@@ -611,7 +612,7 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 	return phi_f;
 }
 
-double calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual)
 {
 	// Residual of equation Ax=b, should go to zero as solution converges. Can be used to check for convergence and also for debugging to make sure residual is decreasing after each iteration. Note that this is not the same as epsilon which is the maximum % change in phi values between iterations, but they should be correlated.
 	double residual = 0.0;
@@ -655,7 +656,137 @@ double calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces
 		scaling_factor += fabs(aC * phi[C->id]);
 	}
 
-	double scaled_residual = residual / fmax(scaling_factor, 1e-10); // Scale residual to prevent issues with very small or large values
+	*scaled_residual = residual / fmax(scaling_factor, 1e-10); // Scale residual to prevent issues with very small or large values
 
-	return scaled_residual;
+	return 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Transient Routines */
+/* -------------------------------------------------------------------------- */
+int calc_time_step(cell* cells, double* A, int* NCELLS, int* NDEGEN_CELLS, double* t, double* min_dt)
+{
+	// If implicit, just return user specified timestep
+	if (!EXPLICIT)
+	{
+		*min_dt = DT;
+		if (T_FINAL - (*t) < *min_dt)
+		{
+			*min_dt = T_FINAL - (*t); // Adjust time step to not exceed final time
+		}
+		return 0;
+	}
+
+	*min_dt = INFINITY; 
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+		double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
+
+		if (aC > 0)
+		{
+			double dt_C = CFL* RHO * C->volume / aC; // Time step based on diffusion stability criterion for cell C
+			if (dt_C < *min_dt)
+			{
+				(*min_dt) = dt_C;
+			}
+		}
+	}
+
+	if (*min_dt == INFINITY)
+	{
+		// If min_dt is still infinity, it means that all aC values were zero or negative
+		fprintf(stderr, "Warning: All diagonal coefficients are zero or negative. Setting time step to default value of 1e-3.\n");
+		return -1; 
+	}
+
+	if (T_FINAL - (*t) < *min_dt)
+	{
+		*min_dt = T_FINAL - (*t); // Adjust time step to not exceed final time
+	}
+
+	return 0;
+}
+
+int build_transient(double* A, double* b, double* phi, cell* cells, int* NCELLS, int* NDEGEN_CELLS, double dt)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+		double fluxC = RHO * C->volume / dt;
+		double fluxC_old = -RHO * C->volume / dt;
+
+		A[IDX(i, i, NSOLCELLS)] += fluxC; // Add contribution to diagonal coefficient for cell C
+		b[i] += -fluxC_old * phi[C->id]; // Add contribution to source term for cell C
+
+	}
+	return 0;
+}
+
+int explicit_update(double* A, double* b, double* phi, cell* cells, face* faces, double* dt, int* NCELLS, int* NDEGEN_CELLS)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+
+	double* phi_new = malloc((NEQNS * *NCELLS) * sizeof(double));
+	if (!phi_new)
+	{
+		// Print error message to stderr stream and exit
+		fprintf(stderr, "Error: Memory allocation failed for phi_old array.\n");
+		return 1; // Exit with error code
+	}
+	phi_new = memcpy(phi_new, phi, (NEQNS * *NCELLS) * sizeof(double));
+
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)]; //current cell, adjust index to account for degenerate cells at beginning of cells array
+
+		double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
+		double aFphiF_sum = 0.0;
+
+		// loop over faces to sum a_i*phi_i for the cell C
+		// Sum over the row
+		// Loop over A and calculate L = sum of all non transient terms (spatial operator)
+		for (int j = 0; j < NSOLCELLS; j++)
+		{
+			if (j == i)
+			{
+				continue; // Skip diagonal term
+			}
+			double aF = A[IDX(i, j, NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell j
+			aFphiF_sum += aF * phi[j + (*NDEGEN_CELLS)]; // Add contribution from neighbor cell j to sum
+		}
+
+		//for (int j = 0; j < C->num_faces; j++)
+		//{
+		//	face* f = &faces[C->face_ids[j]];
+
+		//	if (f->owner == C->id)
+		//	{
+		//		if (f->boundary_face)
+		//		{
+		//			// For boundary faces, the neighbor cell is not included in the solution and should not be included in the residual calculation since its value is determined by the boundary condition, not by solving the linear system. So we can skip this face for the residual calculation.
+		//			continue;
+		//		}
+		//		double aF = A[IDX(i, f->neighbor - (*NDEGEN_CELLS), NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell F
+		//		aFphiF_sum += aF * phi[f->neighbor];
+		//	}
+		//	else if (f->neighbor == C->id)
+		//	{
+		//		double aF = A[IDX(i, f->owner - (*NDEGEN_CELLS), NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell F
+		//		aFphiF_sum += aF * phi[f->owner];
+		//	}
+		//}
+
+		double L = aC * phi[C->id] + aFphiF_sum - b[i]; //spatial operator (all discretized non transient terms)
+
+		phi_new[C->id] = phi[C->id] - *dt * L / (RHO * C->volume); // Explicit Euler update for phi at cell C
+	}
+
+	// Update phi array with new values
+	memcpy(phi, phi_new, (NEQNS * *NCELLS) * sizeof(double));
+	free(phi_new);
+	return 0;
 }

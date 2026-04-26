@@ -114,6 +114,14 @@ int main(void)
 	// initialize grad to zero
 	memset(grad, 0, ((int)3 * NCELLS) * sizeof(double));
 
+	/* -------------------------------------------------------------------------- */
+	/* Initialize Time if transient */
+	/* -------------------------------------------------------------------------- */
+	#if TRANSIENT
+	double time = 0.0; // Initialize time
+	double dt;
+	#endif
+
 	/*-------- Create and apply boundary conditions--------*/
 	// Initialize boundaries (change to allocate for more complex gemoetry)
 	boundary boundaries[3]; // boundaries
@@ -151,6 +159,7 @@ int main(void)
 		}
 	}
 
+	NBOUNDARIES = NENTITIES - 1; // In this case we are treating each entity as a boundary, except for the last one which is the interior cells. This will need to be modified for more complex geometries where not every entity is a boundary
 	/* -------------------------------------------------------------------------- */
 	/* Solver Loop */
 	/* -------------------------------------------------------------------------- */
@@ -199,10 +208,10 @@ int main(void)
 		memset(A, 0, (NEQNS* NSOLCELLS* NSOLCELLS) * sizeof(double));
 		memset(b, 0, ((NEQNS* NSOLCELLS) * sizeof(double)));
 
-		err = build_matrix(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		err = build_diffusion(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
 		{
-			fprintf(stderr, "build_matrix failed with error code %d\n", err);
+			fprintf(stderr, "build_diffusion failed with error code %d\n", err);
 			return 1;
 		}
 
@@ -212,6 +221,37 @@ int main(void)
 			fprintf(stderr, "build_advection failed wiht error code %d\n", err);
 			return 1;
 		}
+
+#if TRANSIENT
+		// Calculate time step here 
+		err = calc_time_step(cells, A, &NCELLS, &NDEGEN_CELLS, &time, &dt);
+		if (err != 0)
+		{
+			fprintf(stderr, "calc_time_step failed with error code %d\n", err);
+			return 1;
+		}
+
+#if EXPLICIT
+		err = explicit_update(A, b, phi, cells, faces, &dt, &NCELLS, &NDEGEN_CELLS);
+		if (err != 0)
+		{
+			fprintf(stderr, "explicit_update failed with error code %d\n", err);
+			return 1;
+		}
+#else
+		//build transient contribution to matrix and source term
+		err = build_transient(A, b, phi, cells, &NCELLS, &NDEGEN_CELLS, dt);
+		if (err != 0)
+		{
+			fprintf(stderr, "build_transient failed with error code %d\n", err);
+			return 1;
+		}
+#endif // EXPLICIT
+#endif //TRANSIENT 
+
+
+#if (!EXPLICIT && TRANSIENT) || !TRANSIENT
+		// Explicit update of phi using forward Euler time stepping
 
 		// Solve Linear System A*phi = b for phi
 		lapack_int info = LAPACKE_dgesv(LAPACK_COL_MAJOR, n, nrhs, A, lda, ipiv, b, ldb);
@@ -228,25 +268,26 @@ int main(void)
 		{
 			phi[j+NDEGEN_CELLS] = b[j];
 		}
+#endif //(!EXPLICIT && TRANSIENT) || !TRANSIENT
+
+		// Update time if transient
+#if TRANSIENT
+		time += dt;
+#endif //TRANSIENT
 
 
-		// Stopping condition and printing change
-		/*double epsilon;
-		err = maxChng(phi_old, phi, &NCELLS, &NDEGEN_CELLS, &epsilon);
+		// Stopping conditions 
+#if TRANSIENT
 		if (i % RPRT_INTERVAL == 0)
 		{
-			printf("ITER = %d \n", i+1);
-			printf("Max change = %g \n", epsilon);
+			printf("ITER = %d \n", i + 1);
+			printf("Time = %g \n", time);
 		}
-		if (epsilon <= STOP_COND)
-		{
-			printf("STOP_COND HIT after %d iterations\n",i+1);
-			printf("Max change = %g \n", epsilon);
-			break;
-		}*/
-
+		if (time >= T_FINAL) break;
+#else
 		// Residual/linear system based stopping condition.
-		double residual = calc_Residual(A, b, phi, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		double residual;
+		err = calc_Residual(A, b, phi, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual);
 		if (i % RPRT_INTERVAL == 0)
 		{
 			printf("ITER = %d \n", i + 1);
@@ -258,65 +299,10 @@ int main(void)
 			printf("Residual = %g \n", residual);
 			break;
 		}
-
-
+#endif //TRANSIENT
 	}
+
 	//---------------------------------------------------
-
-
-	/* Iteration loop
-	* //Calculate gradient at faces
-	*	loop over interior faces
-	*		find flux at each face
-	*		add flux to gradient of owner cell and subtract flux from gradient of neighbor cell
-	*	
-	*	loop over boundary faces
-	*		find flux at each face
-	*		add flux to gradient of owner cell
-	* 
-	*	loop over cells
-	*		divide gradient by volume of cell to get final gradient value
-	* 
-	* //Construct Matrix
-	*	initialize aC and aF as zeros for all cells
-	*	initialize b as Qc*Vc for all cells
-	*	
-	*	loop over all internal faces
-	*		af(owner) +=  -gamma(face)*Ef(face)/dCF
-	*		ac(owner) +=  gamma(face)*Ef(face)/dCF
-	* 
-	*		af(neighbor) +=  gamma(face)*Ef(face)/dCF
-	*		ac(neighbor) +=  -gamma(face)*Ef(face)/dCF
-	* 
-	*		interpolate gradient to face
-	*		
-	*		b(owner) += gamma(face)*grad(face) dot Tf(face)
-	*		b(neighbor) += gamma(face)*grad(face) dot -Tf(face)
-	* 
-	*	loop over all boundary faces
-	* 
-	*		switch (boundary condition type)
-	*		case Dirichlet: 
-	*			af(owner) += -gamma(face)*Ef(face)/dCF
-	*			ac(owner) = gamma(face)*Ef(face)/dCF
-	*			dirichelet coefficents pg 252
-	*		case Neumann:
-	*			neumann coefficients pg 221
-	*		case Robin:
-	*			robin/mixed coefficients pg 253-254
-
-	// Apply Boundary conditions
-
-	// Calculate gradient 
-	// loop over interior faces
-	//	find flux at faces 
-	//	add flux to owner cell and subtract flux from neighbor cell
-	//	loop over boundary faces
-	//  calculate boundary flux at faces and add to owner cell 
-	//	loop over all elemetns and divide gardient by voume of element
-	// 
-	//  
-	*/
 
 	// ------ Write output file --------"output_file.vtk"
 	err = write_vtk_output(out_fname, &nodes, &cells, &NPOINTS, &NCELLS,
