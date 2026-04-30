@@ -20,11 +20,16 @@ int main(void)
 	/* -------------------------------------------------------------------------- */
 	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
 	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_20x20.vtk";
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_20x20.vtk";
+	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_unstruct.vtk";
+
+	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_64x64.vtk";
 	/* -------------------------------------------------------------------------- */
 	/* Output file name */
 	/* -------------------------------------------------------------------------- */
-	const char* out_fname = "hw2_20x20_out.vtk";
+	//const char* out_fname = "hw2_20x20_out.vtk";
+	//const char* out_fname = "hw2_unstruct_explicit_BOUNDEDCD_out.vtk";
+	const char* out_fname = "hw2_64x64_explicit_BOUNDEDCD_out.vtk";
 
 	// Load grid
 	node* nodes;
@@ -120,6 +125,8 @@ int main(void)
 	#if TRANSIENT
 	double time = 0.0; // Initialize time
 	double dt;
+	double next_save_time = 0.0; // Initialize next save time for output
+
 	#endif
 
 	/*-------- Create and apply boundary conditions--------*/
@@ -278,10 +285,45 @@ int main(void)
 
 		// Stopping conditions 
 #if TRANSIENT
+
+		// Reporting to console 
 		if (i % RPRT_INTERVAL == 0)
 		{
 			printf("ITER = %d \n", i + 1);
 			printf("Time = %g \n", time);
+		}
+
+		// Saving solution based on TIME_INTERVAL
+		if (time >= next_save_time - 1e-6)
+		{
+			//const char* out_fname = "hw2_20x20_out.vtk";
+			char base[256];
+			char out_fname_time[256];
+
+			// Copy string into base
+			snprintf(base, sizeof(base), "%s", out_fname);
+
+			// Remove '.vtk' from filename
+			char* p_dot = strrchr(base, '.');
+
+			if (p_dot)
+			{
+				*p_dot = '\0';
+			}
+
+			snprintf(out_fname_time, sizeof(out_fname_time), "%s_%04d.vtk", base,i);
+
+			printf("Saving output at time %g to file: %s\n", time, out_fname_time);
+
+			err = write_vtk_output(out_fname_time, &nodes, &cells, &NPOINTS, &NCELLS,
+				&CELL_LIST_SIZE, &phi, &grad);
+			if (err != 0)
+			{
+				fprintf(stderr, "write_vtk_output failed with error code %d\n", err);
+				return 1;
+			}
+			next_save_time += SAVE_INTERVAL; // Update next save time
+
 		}
 		if (time >= T_FINAL) break;
 #else

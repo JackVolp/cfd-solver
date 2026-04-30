@@ -567,7 +567,9 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 	// Determine phi_f_tilde based on advection scheme
 	switch (scheme) {
 	case UPWIND: 
-		phi_f_tilde = phi_C_tilde;
+		phi_f = phi_C; // For upwind, we can just return phi_C without needing to compute phi_f_tilde
+		return phi_f;
+		//phi_f_tilde = phi_C_tilde;
 		break;
 	case CD:
 		phi_f_tilde = 0.5 * (1 + phi_C_tilde);

@@ -9,8 +9,8 @@
 
 // Solver parameters
 #define STOP_COND 1e-15
-#define RPRT_INTERVAL 1
-#define MAX_ITER 1000
+#define RPRT_INTERVAL 10
+#define MAX_ITER 100000
 
 // Possible advection Schemes user can choose 
 typedef enum advectionScheme {
@@ -36,7 +36,8 @@ extern advectionScheme ADVECTION_SCHEME;
 #define EXPLICIT true
 #define CFL 0.05 // CFL number, only used when transient and explicit are both true
 #define DT 0.05 // time step size, only used when transient is true but explicit is false (inplicit stepping tstep size)
-#define T_FINAL 5.0 // Final time for transient simulation only used when transient
+#define T_FINAL 7.5 // Final time for transient simulation only used when transient
+#define SAVE_INTERVAL 0.5 // Time interval for saving output files, only used when transient
 
 
 #define NEQNS 1 // Number of transport equations solved
