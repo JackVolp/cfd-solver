@@ -33,9 +33,9 @@ extern advectionScheme ADVECTION_SCHEME;
 	// time step size 
 
 #define TRANSIENT true
-#define EXPLICIT true
-#define CFL 0.05 // CFL number, only used when transient and explicit are both true
-#define DT 0.05 // time step size, only used when transient is true but explicit is false (inplicit stepping tstep size)
+#define EXPLICIT false
+#define CFL 0.2 // CFL number, only used when transient and explicit are both true
+#define DT 0.5 // time step size, only used when transient is true but explicit is false (inplicit stepping tstep size)
 #define T_FINAL 7.5 // Final time for transient simulation only used when transient
 #define SAVE_INTERVAL 0.5 // Time interval for saving output files, only used when transient
 

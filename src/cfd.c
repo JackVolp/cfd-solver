@@ -29,7 +29,7 @@ int main(void)
 	/* -------------------------------------------------------------------------- */
 	//const char* out_fname = "hw2_20x20_out.vtk";
 	//const char* out_fname = "hw2_unstruct_explicit_BOUNDEDCD_out.vtk";
-	const char* out_fname = "hw2_64x64_explicit_BOUNDEDCD_out.vtk";
+	const char* out_fname = "output_files\\hw2_64x64_implicit_BOUNDED_CD_out.vtk";
 
 	// Load grid
 	node* nodes;
