@@ -598,7 +598,11 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 		x_G[2] += nodes[node_id].z;
 	}
 
-	cblas_dscal(3, 1.0 / c->num_nodes, x_G, 1);
+	//cblas_dscal(3, 1.0 / c->num_nodes, x_G, 1);
+
+	x_G[0] = x_G[0]/c->num_nodes;
+	x_G[1] = x_G[1]/c->num_nodes;
+	x_G[2] = x_G[2]/c->num_nodes;
 
 	if (c->type < 5) // If Cell is a degenerate cell, centroid is geometric center and volume is zero
 	{
@@ -635,20 +639,32 @@ int calculate_cell_centroid_and_vol(cell* c, node* nodes)
 
 
 		// Compute area of subtriangle formed by r1, r2, and r3 using cross product
-		double v1[3];
-		double v2[3];
+		double v1[3] = {r2[0], r2[1], r2[2]};
+		double v2[3] = {r3[0], r3[1], r3[2]};
+		
+		/* cblas_dcopy(3, r2, 1, v1, 1); // v1 = r2
+		cblas_dcopy(3, r3, 1, v2, 1); // v2 = r3 */
 
-		cblas_dcopy(3, r2, 1, v1, 1); // v1 = r2
-		cblas_dcopy(3, r3, 1, v2, 1); // v2 = r3
+		v1[0] = r2[0] - r1[0];
+		v1[1] = r2[1] - r1[1];
+		v1[2] = r2[2] - r1[2];
 
-		cblas_daxpy(3, -1.0, r1, 1, v1, 1); // v1 = r2 - r1
-		cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1
+		v2[0] = r3[0] - r1[0];
+		v2[1] = r3[1] - r1[1];
+		v2[2] = r3[2] - r1[2];
+
+		/* cblas_daxpy(3, -1.0, r1, 1, v1, 1); // v1 = r2 - r1
+		cblas_daxpy(3, -1.0, r1, 1, v2, 1); // v2 = r3 - r1 */
 
 		// Calculate volume of the triangle formed by r1, r2, and r3
 		double St[3];
 		cross_prod(v1, v2, St); // Calculate cross product of v1 and v2to get the area vector of the triangle
 
-		cblas_dscal(3, 0.5, St, 1); // Scale the area vector by 0.5 to get the area of the triangle
+		//cblas_dscal(3, 0.5, St, 1); // Scale the area vector by 0.5 to get the area of the triangle
+		St[0] = St[0] * 0.5;
+		St[1] = St[1] * 0.5;
+		St[2] = St[2] * 0.5;
+
 		double St_mag;
 		magnitude(St, &St_mag); // Calculate the magnitude of the area vector to get the area of the triangle
 

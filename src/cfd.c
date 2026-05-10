@@ -11,40 +11,44 @@
 #include "solver.h"
 #include "setup.h"
 #include "math_helpers.h"
+#include <petscksp.h>
 
+int main(int argc, char **argv)
+{
+	/* Setup Petsc */
+	PetscCall(PetscInitialize(&argc, &argv, NULL, NULL));
 
-int main(void)
-{	
 	/* -------------------------------------------------------------------------- */
 	/* Grid input file name */
 	/* -------------------------------------------------------------------------- */
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_20x20.vtk";
-	//const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_unstruct.vtk";
+	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
+	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
+	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_20x20.vtk";
+	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_unstruct.vtk";
 
-	const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_64x64.vtk";
+	//const char *filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_64x64.vtk";
+	const char *filename = "input/hw2_64x64.vtk";
 	/* -------------------------------------------------------------------------- */
 	/* Output file name */
 	/* -------------------------------------------------------------------------- */
-	//const char* out_fname = "hw2_20x20_out.vtk";
-	//const char* out_fname = "hw2_unstruct_explicit_BOUNDEDCD_out.vtk";
-	const char* out_fname = "output_files\\hw2_64x64_implicit_BOUNDED_CD_out.vtk";
-
+	// const char* out_fname = "hw2_20x20_out.vtk";
+	// const char* out_fname = "hw2_unstruct_explicit_BOUNDEDCD_out.vtk";
+	//const char *out_fname = "output_files\\hw2_64x64_implicit_BOUNDED_CD_out.vtk";
+	const char *out_fname = "output/hw2_64x64_implicit_BOUNDED_CD_out.vtk";	
+	
 	// Load grid
-	node* nodes;
-	cell* cells; 
-	face* faces;
-	cellEntity* cellEntities;
+	node *nodes;
+	cell *cells;
+	face *faces;
+	cellEntity *cellEntities;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS=0, NBOUNDARIES = 0, NSOLCELLS = 0, NENTITIES = 0;
-
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS = 0, NBOUNDARIES = 0, NSOLCELLS = 0, NENTITIES = 0;
 
 	/*----------Read grid from .vtk grid file----------*/
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
 	int err = read_grid(filename, &nodes, &cells, &cellEntities, &NPOINTS, &NCELLS, &CELL_LIST_SIZE, &MAX_FACES, &NDEGEN_CELLS, &NENTITIES);
 	NSOLCELLS = NCELLS - NDEGEN_CELLS; // Number of cells that have volume and are included in the solution
-	
+
 	if (err != 0)
 	{
 		fprintf(stderr, "read_grid failed with error code %d\n", err);
@@ -52,12 +56,11 @@ int main(void)
 	}
 
 	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
-	err = build_faces_and_cells(nodes, cells, &NCELLS, &MAX_FACES, &NFACES,&faces);
-
+	err = build_faces_and_cells(nodes, cells, &NCELLS, &MAX_FACES, &NFACES, &faces);
 
 	/*----------Allocate Arrays----------*/
 	// Allocate conservative scalars
-	double* phi = malloc((NEQNS * NCELLS) * sizeof(double));
+	double *phi = malloc((NEQNS * NCELLS) * sizeof(double));
 	if (phi == NULL)
 	{
 		// Print error message to stderr stream and exit
@@ -65,7 +68,7 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
-	double* phi_old = malloc((NEQNS * NCELLS) * sizeof(double));
+	double *phi_old = malloc((NEQNS * NCELLS) * sizeof(double));
 	if (!phi_old)
 	{
 		// Print error message to stderr stream and exit
@@ -74,7 +77,7 @@ int main(void)
 	}
 
 	// Allocate gradient array (3 components for x,y,z)
-	double* grad = malloc((3 * NCELLS) * sizeof(double));
+	double *grad = malloc((3 * NCELLS) * sizeof(double));
 	if (grad == NULL)
 	{
 		// Print error message to stderr stream and exit
@@ -83,20 +86,20 @@ int main(void)
 	}
 
 	/*--------Setup matrix arrays and solver parameters--------*/
-	lapack_int n = NSOLCELLS; // Number of equations (size of the system)
-	lapack_int nrhs = 1; // Number of right-hand sides (columns of B)
+	/* lapack_int n = NSOLCELLS;	// Number of equations (size of the system)
+	lapack_int nrhs = 1;		// Number of right-hand sides (columns of B)
 	lapack_int lda = NSOLCELLS; // Leading dimension of A
 	lapack_int ldb = NSOLCELLS; // Leading dimension of B
 
-	lapack_int* ipiv = malloc(NSOLCELLS * sizeof(lapack_int)); // Pivot indices for LU factorization
+	lapack_int *ipiv = malloc(NSOLCELLS * sizeof(lapack_int)); // Pivot indices for LU factorization
 	if (!ipiv)
 	{
 		// Print error message to stderr stream and exit
 		fprintf(stderr, "Error: Memory allocation failed for ipiv array.\n");
 		return 1; // Exit with error code
-	}
+	} */
 
-	double* A = malloc((NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double)); // Coefficient matrix (will be stored in sparse format later)
+	double *A = malloc((NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double)); // Coefficient matrix (will be stored in sparse format later)
 	if (!A)
 	{
 		// print error message to stderr stream
@@ -104,7 +107,7 @@ int main(void)
 		return 1; // Exit with error code
 	}
 
-	double* b = malloc(NSOLCELLS * sizeof(double)); // Source term vector
+	double *b = malloc(NSOLCELLS * sizeof(double)); // Source term vector
 	if (!b)
 	{
 		// print error message to stderr stream
@@ -119,22 +122,22 @@ int main(void)
 	// initialize grad to zero
 	memset(grad, 0, ((int)3 * NCELLS) * sizeof(double));
 
-	/* -------------------------------------------------------------------------- */
-	/* Initialize Time if transient */
-	/* -------------------------------------------------------------------------- */
-	#if TRANSIENT
+/* -------------------------------------------------------------------------- */
+/* Initialize Time if transient */
+/* -------------------------------------------------------------------------- */
+#if TRANSIENT
 	double time = 0.0; // Initialize time
 	double dt;
 	double next_save_time = 0.0; // Initialize next save time for output
 
-	#endif
+#endif
 
 	/*-------- Create and apply boundary conditions--------*/
 	// Initialize boundaries (change to allocate for more complex gemoetry)
 	boundary boundaries[3]; // boundaries
-	boundaryType hw2_boundaries[3] = { Dirichlet, Neumann, Dirichlet };
+	boundaryType hw2_boundaries[3] = {Dirichlet, Neumann, Dirichlet};
 
-	//boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
+	// boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
 	/*boundaryData p1_boundary_data[4] = {
 		{.q_b = 0.0},
 		{.robin = {.h_inf = 100.0, .phi_inf = 25.}},
@@ -145,23 +148,21 @@ int main(void)
 	boundaryData hw2_boundary_data[3] = {
 		{.phi_b = (*phi0_boundary)},
 		{.q_b = (*zero_flux)},
-		{.phi_b = (*inlet_profile)}
-	};
-
+		{.phi_b = (*inlet_profile)}};
 
 	/*for (int i = 0; i < NBOUNDARIES; i++)
 	{
 		int endpoints[2];
 		endpoints[0] = i;
-		endpoints[1] = (i+1) % (NBOUNDARIES); 
+		endpoints[1] = (i+1) % (NBOUNDARIES);
 		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i],p1_boundary_data[i], nodes, faces, &NFACES);
 	}*/
-	
-	for (int i = 0; i < NENTITIES-1; i++)
+
+	for (int i = 0; i < NENTITIES - 1; i++)
 	{
 		if (cellEntities[i].id != 9)
 		{
-			//build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
+			// build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
 			build_boundary_entity(&boundaries[i], i, hw2_boundaries[i], hw2_boundary_data[i], &cellEntities[i], faces, &NFACES);
 		}
 	}
@@ -189,7 +190,6 @@ int main(void)
 		// Save old phi
 		phi_old = memcpy(phi_old, phi, (NEQNS * NCELLS) * sizeof(double));
 
-
 		// Apply boundary conditions (sets phi on boundaries)
 		for (int j = 0; j < NBOUNDARIES; j++)
 		{
@@ -211,9 +211,9 @@ int main(void)
 		}
 
 		// Build Matrix and Source term
-			// initialize matrix coefficients and source term vector to zero
-		memset(A, 0, (NEQNS* NSOLCELLS* NSOLCELLS) * sizeof(double));
-		memset(b, 0, ((NEQNS* NSOLCELLS) * sizeof(double)));
+		// initialize matrix coefficients and source term vector to zero
+		memset(A, 0, (NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double));
+		memset(b, 0, ((NEQNS * NSOLCELLS) * sizeof(double)));
 
 		err = build_diffusion(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
@@ -230,7 +230,7 @@ int main(void)
 		}
 
 #if TRANSIENT
-		// Calculate time step here 
+		// Calculate time step here
 		err = calc_time_step(cells, A, &NCELLS, &NDEGEN_CELLS, &time, &dt);
 		if (err != 0)
 		{
@@ -246,7 +246,7 @@ int main(void)
 			return 1;
 		}
 #else
-		//build transient contribution to matrix and source term
+		// build transient contribution to matrix and source term
 		err = build_transient(A, b, phi, cells, &NCELLS, &NDEGEN_CELLS, dt);
 		if (err != 0)
 		{
@@ -254,39 +254,111 @@ int main(void)
 			return 1;
 		}
 #endif // EXPLICIT
-#endif //TRANSIENT 
-
+#endif // TRANSIENT
 
 #if (!EXPLICIT && TRANSIENT) || !TRANSIENT
+		/* -------------------------------------------------------------------------- */
+		/*                       Solve Linear System                      */
+		/* -------------------------------------------------------------------------- */
+		/* --------------------------------- LAPACK --------------------------------- */
 		// Explicit update of phi using forward Euler time stepping
 
 		// Solve Linear System A*phi = b for phi
-		lapack_int info = LAPACKE_dgesv(LAPACK_COL_MAJOR, n, nrhs, A, lda, ipiv, b, ldb);
+		/* lapack_int info = LAPACKE_dgesv(LAPACK_COL_MAJOR, n, nrhs, A, lda, ipiv, b, ldb);
 		if (info != 0)
 		{
 			fprintf(stderr, "LAPACKE_dgesv failed with error code %d\n", info);
 			return 1;
 		}
-		
-		// Lapack dgesv overwrites the right-hand side vector b with the solution, so we can copy it back to phi for the next iteration. We can also use b to compute the maximum change
-		
 
-		for (int j=0; j < NSOLCELLS; j++)
+		// Lapack dgesv overwrites the right-hand side vector b with the solution, so we can copy it back to phi for the next iteration. We can also use b to compute the maximum change
+		for (int j = 0; j < NSOLCELLS; j++)
 		{
-			phi[j+NDEGEN_CELLS] = b[j];
+			phi[j + NDEGEN_CELLS] = b[j];
+		} */
+
+		/* ---------------------------------- PETSc --------------------------------- */
+
+		Mat Ap;		// petsc matrix
+		Vec bp, xp; // petsc vectors
+		KSP ksp;	// solver object
+		PC pc;		// preconditioner object
+
+		// Create PETSc matrix and vectors, and KSP solver context here, and solve the linear system using PETSc. This will require converting the matrix A and vector b into the appropriate PETSc formats (e.g., sparse format for A). You can use the PETSc functions MatSetValues and VecSetValues to populate the matrix and vector, and then call KSPSolve to solve the system. Remember to destroy the PETSc objects after use to free memory.
+		// matrix A
+		PetscCall(MatCreate(PETSC_COMM_WORLD, &Ap));
+		PetscCall(MatSetSizes(Ap, PETSC_DECIDE, PETSC_DECIDE, NSOLCELLS, NSOLCELLS));
+		PetscCall(MatSetFromOptions(Ap));
+		PetscCall(MatSetUp(Ap));
+		// vector b
+		PetscCall(VecCreate(PETSC_COMM_WORLD, &bp));
+		PetscCall(VecSetSizes(bp, PETSC_DECIDE, NSOLCELLS));
+		PetscCall(VecSetFromOptions(bp));
+		PetscCall(VecDuplicate(bp, &xp)); // Create solution vector xp with same size as bp
+
+		// Copy dense matrix into petsc matrix
+		for (int row = 0; row < NSOLCELLS; row++)
+		{
+			PetscCall(VecSetValue(bp, row, b[row], INSERT_VALUES));
+
+			for (int col = 0; col < NSOLCELLS; col++)
+			{
+				double value = A[row + col * NSOLCELLS]; /* LAPACK_COL_MAJOR layout */
+
+				if (fabs(value) > 0.0)
+				{
+					PetscCall(MatSetValue(Ap, row, col, value, INSERT_VALUES));
+				}
+			}
 		}
+
+		PetscCall(MatAssemblyBegin(Ap, MAT_FINAL_ASSEMBLY));
+		PetscCall(MatAssemblyEnd(Ap, MAT_FINAL_ASSEMBLY));
+		PetscCall(VecAssemblyBegin(bp));
+		PetscCall(VecAssemblyEnd(bp));
+
+		// Solve system
+		PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp));
+		PetscCall(KSPSetOperators(ksp, Ap, Ap));
+
+		PetscCall(KSPGetPC(ksp, &pc));
+		PetscCall(PCSetType(pc, PCILU));	  // set ilu as default preconditioner
+		PetscCall(KSPSetType(ksp, KSPGMRES)); // default solve with gmres
+
+		// allow for settings override at runtime
+		PetscCall(KSPSetFromOptions(ksp));
+
+		PetscCall(KSPSolve(ksp, bp, xp)); // solve
+
+		// copy solution back to phi
+		const PetscScalar *xarray;
+		PetscCall(VecGetArrayRead(xp, &xarray));
+
+		for (int j = 0; j < NSOLCELLS; j++)
+		{
+			phi[j + NDEGEN_CELLS] = xarray[j];
+		}
+
+		PetscCall(VecRestoreArrayRead(xp, &xarray));
+
+		// Clean up PETSc objects
+		PetscCall(KSPDestroy(&ksp));
+		PetscCall(VecDestroy(&xp));
+		PetscCall(VecDestroy(&bp));
+		PetscCall(MatDestroy(&Ap));
+		/* -------------------------------------------------------------------------- */
+
 #endif //(!EXPLICIT && TRANSIENT) || !TRANSIENT
 
 		// Update time if transient
 #if TRANSIENT
 		time += dt;
-#endif //TRANSIENT
+#endif // TRANSIENT
 
-
-		// Stopping conditions 
+		// Stopping conditions
 #if TRANSIENT
 
-		// Reporting to console 
+		// Reporting to console
 		if (i % RPRT_INTERVAL == 0)
 		{
 			printf("ITER = %d \n", i + 1);
@@ -296,7 +368,7 @@ int main(void)
 		// Saving solution based on TIME_INTERVAL
 		if (time >= next_save_time - 1e-6)
 		{
-			//const char* out_fname = "hw2_20x20_out.vtk";
+			// const char* out_fname = "hw2_20x20_out.vtk";
 			char base[256];
 			char out_fname_time[256];
 
@@ -304,28 +376,28 @@ int main(void)
 			snprintf(base, sizeof(base), "%s", out_fname);
 
 			// Remove '.vtk' from filename
-			char* p_dot = strrchr(base, '.');
+			char *p_dot = strrchr(base, '.');
 
 			if (p_dot)
 			{
 				*p_dot = '\0';
 			}
 
-			snprintf(out_fname_time, sizeof(out_fname_time), "%s_%04d.vtk", base,i);
+			snprintf(out_fname_time, sizeof(out_fname_time), "%s_%04d.vtk", base, i);
 
 			printf("Saving output at time %g to file: %s\n", time, out_fname_time);
 
 			err = write_vtk_output(out_fname_time, &nodes, &cells, &NPOINTS, &NCELLS,
-				&CELL_LIST_SIZE, &phi, &grad);
+								   &CELL_LIST_SIZE, &phi, &grad);
 			if (err != 0)
 			{
 				fprintf(stderr, "write_vtk_output failed with error code %d\n", err);
 				return 1;
 			}
 			next_save_time += SAVE_INTERVAL; // Update next save time
-
 		}
-		if (time >= T_FINAL) break;
+		if (time >= T_FINAL)
+			break;
 #else
 		// Residual/linear system based stopping condition.
 		double residual;
@@ -341,14 +413,14 @@ int main(void)
 			printf("Residual = %g \n", residual);
 			break;
 		}
-#endif //TRANSIENT
+#endif // TRANSIENT
 	}
 
 	//---------------------------------------------------
 
 	// ------ Write output file --------"output_file.vtk"
 	err = write_vtk_output(out_fname, &nodes, &cells, &NPOINTS, &NCELLS,
-		&CELL_LIST_SIZE, &phi, &grad);
+						   &CELL_LIST_SIZE, &phi, &grad);
 	if (err != 0)
 	{
 		fprintf(stderr, "write_vtk_output failed with error code %d\n", err);
@@ -356,31 +428,29 @@ int main(void)
 	}
 
 	// Release Allocated Memory for grid
-	free_grid(nodes, cells, faces, NCELLS,NFACES);
+	free_grid(nodes, cells, faces, NCELLS, NFACES);
 
 	// Release conservatiWve scalars memory
 	free(phi);
 	free(grad);
 	free(A);
 	free(b);
-	free(ipiv);
+	//free(ipiv);
 	free(phi_old);
 
-
+	PetscCall(PetscFinalize());
 	printf("To C or not to C: that is the question. \n");
 	return 0;
-	
 }
 
-
 /*---------------------------------------------------------------------------
-* Write data function and grid 
+* Write data function and grid
 ----------------------------------------------------------------------------*/
-int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
-	int* NPOINTS, int* NCELLS, int* CELL_LIST_SIZE, double** phi, double** grad)
+int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
+					 int *NPOINTS, int *NCELLS, int *CELL_LIST_SIZE, double **phi, double **grad)
 {
 	// Open file for writing
-	FILE* fp = fopen(out_filename, "w");
+	FILE *fp = fopen(out_filename, "w");
 
 	if (!fp)
 	{
@@ -401,7 +471,7 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	for (int i = 0; i < *NPOINTS; i++)
 	{
 		fprintf(fp, "%.15f %.15f %.15f\n",
-			(*nodes)[i].x, (*nodes)[i].y, (*nodes)[i].z);
+				(*nodes)[i].x, (*nodes)[i].y, (*nodes)[i].z);
 	}
 
 	// Write cells
@@ -423,7 +493,6 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 			}
 		}
 	}
-
 
 	// Write cell types
 	fprintf(fp, "CELL_TYPES %d\n", *NCELLS);
@@ -451,7 +520,6 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 		fprintf(fp, "%d\n", (*cells)[i].entity_id);
 	}
 
-
 	// Phi
 	fprintf(fp, "SCALARS phi[%d] double 1\n", 0);
 	fprintf(fp, "LOOKUP_TABLE default\n");
@@ -473,9 +541,9 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	for (int i = 0; i < *NCELLS; i++)
 	{
 		fprintf(fp, "%.15f %.15f %.15f\n",
-			(*grad)[IDX(0, i, 3)],
-			(*grad)[IDX(1, i, 3)],
-			(*grad)[IDX(2, i, 3)]);
+				(*grad)[IDX(0, i, 3)],
+				(*grad)[IDX(1, i, 3)],
+				(*grad)[IDX(2, i, 3)]);
 	}
 
 	// Optional: mark degenerate cells explicitly
@@ -498,7 +566,3 @@ int write_vtk_output(const char* out_filename, node** nodes, cell** cells,
 	fclose(fp);
 	return 0;
 }
-
-
-
-
