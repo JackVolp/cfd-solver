@@ -17,24 +17,6 @@ int main(int argc, char **argv)
 {
 	/* Setup Petsc */
 	PetscCall(PetscInitialize(&argc, &argv, NULL, NULL));
-
-	/* -------------------------------------------------------------------------- */
-	/* Grid input file name */
-	/* -------------------------------------------------------------------------- */
-	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\p5N8x2_tri.vtk";
-	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\32x8_named.vtk";
-	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_20x20.vtk";
-	// const char* filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_unstruct.vtk";
-
-	//const char *filename = "C:\\Users\\jtvol\\Documents\\ME696\\Convection-Diffusion\\out\\build\\x64-Debug\\hw2_64x64.vtk";
-	const char *filename = "input/hw2_64x64.vtk";
-	/* -------------------------------------------------------------------------- */
-	/* Output file name */
-	/* -------------------------------------------------------------------------- */
-	// const char* out_fname = "hw2_20x20_out.vtk";
-	// const char* out_fname = "hw2_unstruct_explicit_BOUNDEDCD_out.vtk";
-	//const char *out_fname = "output_files\\hw2_64x64_implicit_BOUNDED_CD_out.vtk";
-	const char *out_fname = "output/hw2_64x64_implicit_BOUNDED_CD_out.vtk";	
 	
 	// Load grid
 	node *nodes;
@@ -99,7 +81,7 @@ int main(int argc, char **argv)
 		return 1; // Exit with error code
 	} */
 
-	double *A = malloc((NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double)); // Coefficient matrix (will be stored in sparse format later)
+	/* double *A = malloc((NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double)); // Coefficient matrix (will be stored in sparse format later)
 	if (!A)
 	{
 		// print error message to stderr stream
@@ -113,7 +95,24 @@ int main(int argc, char **argv)
 		// print error message to stderr stream
 		fprintf(stderr, "Error: Memory allocation failed for b array.\n");
 		return 1; // Exit with error code
-	}
+	} */
+
+	Mat A;		// petsc matrix
+	Vec b, xp; // petsc vectors
+	KSP ksp;	// solver object
+	PC pc;		// preconditioner object
+
+	// Create PETSc matrix and vectors, and KSP solver context here, and solve the linear system using PETSc. This will require converting the matrix A and vector b into the appropriate PETSc formats (e.g., sparse format for A). You can use the PETSc functions MatSetValues and VecSetValues to populate the matrix and vector, and then call KSPSolve to solve the system. Remember to destroy the PETSc objects after use to free memory.
+	// matrix A
+	PetscCall(MatCreate(PETSC_COMM_WORLD, &A));
+	PetscCall(MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, NSOLCELLS, NSOLCELLS));
+	PetscCall(MatSetFromOptions(A));
+	PetscCall(MatSetUp(A));
+	// vector b
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &b));
+	PetscCall(VecSetSizes(b, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(b));
+	PetscCall(VecDuplicate(b, &xp)); // Create solution vector xp with same size as bp
 
 	/*--------Initialize Phi--------*/
 	// initialize phi to 0 everywhere
@@ -160,7 +159,7 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < NENTITIES - 1; i++)
 	{
-		if (cellEntities[i].id != 9)
+		if (cellEntities[i].id != 9) //make entity 9 always internal domain
 		{
 			// build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
 			build_boundary_entity(&boundaries[i], i, hw2_boundaries[i], hw2_boundary_data[i], &cellEntities[i], faces, &NFACES);
@@ -212,17 +211,20 @@ int main(int argc, char **argv)
 
 		// Build Matrix and Source term
 		// initialize matrix coefficients and source term vector to zero
-		memset(A, 0, (NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double));
-		memset(b, 0, ((NEQNS * NSOLCELLS) * sizeof(double)));
+		PetscCall(MatZeroEntries(A));
+		PetscCall(VecZeroEntries(b));
+		
+		/* memset(A, 0, (NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double));
+		memset(b, 0, ((NEQNS * NSOLCELLS) * sizeof(double))); */
 
-		err = build_diffusion(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		err = build_diffusion(&A, &b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
 		{
 			fprintf(stderr, "build_diffusion failed with error code %d\n", err);
 			return 1;
 		}
 
-		err = build_advection(A, b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		err = build_advection(&A, &b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
 		{
 			fprintf(stderr, "build_advection failed wiht error code %d\n", err);
@@ -230,8 +232,13 @@ int main(int argc, char **argv)
 		}
 
 #if TRANSIENT
+
+		// Intermediate matrix assembly so matrix A can be indexed.
+		PetscCall(MatAssemblyBegin(A, MAT_FLUSH_ASSEMBLY));
+		PetscCall(MatAssemblyEnd(A, MAT_FLUSH_ASSEMBLY));
+
 		// Calculate time step here
-		err = calc_time_step(cells, A, &NCELLS, &NDEGEN_CELLS, &time, &dt);
+		err = calc_time_step(cells, &A, &NCELLS, &NDEGEN_CELLS, &time, &dt);
 		if (err != 0)
 		{
 			fprintf(stderr, "calc_time_step failed with error code %d\n", err);
@@ -247,7 +254,7 @@ int main(int argc, char **argv)
 		}
 #else
 		// build transient contribution to matrix and source term
-		err = build_transient(A, b, phi, cells, &NCELLS, &NDEGEN_CELLS, dt);
+		err = build_transient(&A, &b, phi, cells, &NCELLS, &NDEGEN_CELLS, dt);
 		if (err != 0)
 		{
 			fprintf(stderr, "build_transient failed with error code %d\n", err);
@@ -279,7 +286,7 @@ int main(int argc, char **argv)
 
 		/* ---------------------------------- PETSc --------------------------------- */
 
-		Mat Ap;		// petsc matrix
+		/* Mat Ap;		// petsc matrix
 		Vec bp, xp; // petsc vectors
 		KSP ksp;	// solver object
 		PC pc;		// preconditioner object
@@ -295,31 +302,32 @@ int main(int argc, char **argv)
 		PetscCall(VecSetSizes(bp, PETSC_DECIDE, NSOLCELLS));
 		PetscCall(VecSetFromOptions(bp));
 		PetscCall(VecDuplicate(bp, &xp)); // Create solution vector xp with same size as bp
+ */
 
 		// Copy dense matrix into petsc matrix
-		for (int row = 0; row < NSOLCELLS; row++)
+		/* for (int row = 0; row < NSOLCELLS; row++)
 		{
-			PetscCall(VecSetValue(bp, row, b[row], INSERT_VALUES));
+			PetscCall(VecSetValue(b, row, b[row], INSERT_VALUES));
 
 			for (int col = 0; col < NSOLCELLS; col++)
 			{
-				double value = A[row + col * NSOLCELLS]; /* LAPACK_COL_MAJOR layout */
+				double value = A[row + col * NSOLCELLS]; // LAPACK_COL_MAJOR layout 
 
 				if (fabs(value) > 0.0)
 				{
 					PetscCall(MatSetValue(Ap, row, col, value, INSERT_VALUES));
 				}
 			}
-		}
+		} */
 
-		PetscCall(MatAssemblyBegin(Ap, MAT_FINAL_ASSEMBLY));
-		PetscCall(MatAssemblyEnd(Ap, MAT_FINAL_ASSEMBLY));
-		PetscCall(VecAssemblyBegin(bp));
-		PetscCall(VecAssemblyEnd(bp));
+		PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+		PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+		PetscCall(VecAssemblyBegin(b));
+		PetscCall(VecAssemblyEnd(b));
 
 		// Solve system
 		PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp));
-		PetscCall(KSPSetOperators(ksp, Ap, Ap));
+		PetscCall(KSPSetOperators(ksp, A, A));
 
 		PetscCall(KSPGetPC(ksp, &pc));
 		PetscCall(PCSetType(pc, PCILU));	  // set ilu as default preconditioner
@@ -328,7 +336,7 @@ int main(int argc, char **argv)
 		// allow for settings override at runtime
 		PetscCall(KSPSetFromOptions(ksp));
 
-		PetscCall(KSPSolve(ksp, bp, xp)); // solve
+		PetscCall(KSPSolve(ksp, b, xp)); // solve
 
 		// copy solution back to phi
 		const PetscScalar *xarray;
@@ -341,11 +349,6 @@ int main(int argc, char **argv)
 
 		PetscCall(VecRestoreArrayRead(xp, &xarray));
 
-		// Clean up PETSc objects
-		PetscCall(KSPDestroy(&ksp));
-		PetscCall(VecDestroy(&xp));
-		PetscCall(VecDestroy(&bp));
-		PetscCall(MatDestroy(&Ap));
 		/* -------------------------------------------------------------------------- */
 
 #endif //(!EXPLICIT && TRANSIENT) || !TRANSIENT
@@ -401,7 +404,7 @@ int main(int argc, char **argv)
 #else
 		// Residual/linear system based stopping condition.
 		double residual;
-		err = calc_Residual(A, b, phi, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual);
+		err = calc_Residual(&A, &b, phi, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual);
 		if (i % RPRT_INTERVAL == 0)
 		{
 			printf("ITER = %d \n", i + 1);
@@ -433,15 +436,22 @@ int main(int argc, char **argv)
 	// Release conservatiWve scalars memory
 	free(phi);
 	free(grad);
-	free(A);
-	free(b);
+	//free(A);
+	//free(b);
 	//free(ipiv);
 	free(phi_old);
+
+	// Clean up PETSc objects
+	PetscCall(KSPDestroy(&ksp));
+	PetscCall(VecDestroy(&xp));
+	PetscCall(VecDestroy(&b));
+	PetscCall(MatDestroy(&A));
 
 	PetscCall(PetscFinalize());
 	printf("To C or not to C: that is the question. \n");
 	return 0;
 }
+
 
 /*---------------------------------------------------------------------------
 * Write data function and grid

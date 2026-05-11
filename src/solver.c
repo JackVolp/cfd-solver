@@ -128,10 +128,10 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 
 
 // this function also updates the gradient vector at the boundary /degenerate cell indicies with the gradients at the boundary faces. This should prob be in a different function
-int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
-		
+	
 	// Loop over all all faces and add matrix contributions
 	for (int i = 0; i < *NFACES; i++)
 	{
@@ -176,7 +176,9 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 			{
 				case Dirichlet: {
 					
-					A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += GAMMA * gDiff_b; //aC for owner
+					//A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += GAMMA * gDiff_b; //aC for owner
+					PetscScalar val = GAMMA * gDiff_b; //aC for owner
+					PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val, ADD_VALUES));
 					
 					//interpolate gradient to face using Eq. (9.33) but with boundary value instead of neighbor cell value
 					double grad_face[3] = { 0., 0., 0. }; // Initialize gradient at face
@@ -188,8 +190,10 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 					grad[IDX(2, F_idx, 3)] = grad_face[2];
 
 					double fluxVb = -GAMMA * gDiff_b * phi[F_idx] - GAMMA*dot(grad_face,Tf); //nonlinearized flux contibution
-
-					b[Csol_idx] += -fluxVb; // Source term contribution for owner cell, negative since we are moving it to the right hand side of the equation
+					
+					val = -fluxVb; //petsc scalar to add to matrix source
+					PetscCall(VecSetValues(*b, 1, &Csol_idx, &val, ADD_VALUES));
+					//b[Csol_idx] += -fluxVb; // Source term contribution for owner cell, negative since we are moving it to the right hand side of the equation
 					break;
 				}
 				case Neumann: {
@@ -199,8 +203,10 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 					//double q_b = boundaries[f->boundary_id].data.q_b; // Neumann boundary condition value (flux)									
 
 					double fluxVb = q_b * Sf_mag; // Flux contribution from boundary condition, positive since we are adding it to the source term on the right hand side of the equation
-
-					b[Csol_idx] += fluxVb; // Source term contribution for owner cell
+					
+					PetscScalar val = fluxVb; //petsc scalar to add to matrix source
+					PetscCall(VecSetValues(*b, 1, &Csol_idx, &val, ADD_VALUES));
+					//b[Csol_idx] += fluxVb; // Source term contribution for owner cell
 					break;
 				}
 				case Robin: {
@@ -220,9 +226,15 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 					grad[IDX(2, F_idx, 3)] = grad_face[2];
 
 					double fluxVb = -fluxCb * phi_inf - (h_inf * Sf_mag * GAMMA * dot(grad_face, Tf)) / (h_inf * Sf_mag + GAMMA * gDiff_b); // eq. 8.87, nonlinearized flux contribution 
+					
+					PetscScalar val = fluxCb; //petsc scalar to add to aC
+					PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val, ADD_VALUES));
 
-					A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fluxCb; //aC for owner cell from Robin boundary condition
-					b[Csol_idx] += -fluxVb; // Source term contribution for owner cell, negative since we are moving it to the right hand side of the equation
+					val = -fluxVb; //petsc scalar to add to RHS
+					PetscCall(VecSetValues(*b, 1, &Csol_idx, &val, ADD_VALUES));
+					
+					//A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fluxCb; //aC for owner cell from Robin boundary condition
+					//b[Csol_idx] += -fluxVb; // Source term contribution for owner cell, negative since we are moving it to the right hand side of the equation
 					break;
 				}
 			}
@@ -230,12 +242,23 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 		else // interoir face 
 		{					
 			// Assign contribution to coefficients for owner cell (cell_C)
-			A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += GAMMA*gDiff; //aC for owner
-			A[IDX(Csol_idx, Fsol_idx, NSOLCELLS)] += -GAMMA*gDiff; //aF for owner
+			PetscScalar val_aCC = GAMMA*gDiff;
+			PetscScalar val_aCF = -GAMMA*gDiff;
+
+			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val_aCC, ADD_VALUES));
+			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Fsol_idx, &val_aCF, ADD_VALUES));
+
+			//A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += GAMMA*gDiff; //aC for owner
+			//A[IDX(Csol_idx, Fsol_idx, NSOLCELLS)] += -GAMMA*gDiff; //aF for owner
 
 			// Assign contribution to coefficients for neighbor cell (cell_F)
-			A[IDX(Fsol_idx, Fsol_idx, NSOLCELLS)] += GAMMA*gDiff; //aC for neighbor
-			A[IDX(Fsol_idx, Csol_idx, NSOLCELLS)] += -GAMMA*gDiff; //aF for neighbor
+			PetscScalar val_aFF = GAMMA*gDiff;
+			PetscScalar val_aFC = -GAMMA*gDiff;
+
+			PetscCall(MatSetValues(*A, 1, &Fsol_idx, 1, &Fsol_idx, &val_aFF, ADD_VALUES));
+			PetscCall(MatSetValues(*A, 1, &Fsol_idx, 1, &Csol_idx, &val_aFC, ADD_VALUES));
+			//A[IDX(Fsol_idx, Fsol_idx, NSOLCELLS)] += GAMMA*gDiff; //aC for neighbor
+			//A[IDX(Fsol_idx, Csol_idx, NSOLCELLS)] += -GAMMA*gDiff; //aF for neighbor
 
 			// ----Source Terms------
 			// interpolate gradient to face using Eq. (9.33)
@@ -244,9 +267,14 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 			grad2face(grad_face, &grad[3*C_idx], &grad[3*F_idx], rCF, dCF, phi[C_idx], phi[F_idx],cell_C,cell_F,f);
 
 			// Contribution to source term for owner cell
-			
-			b[Csol_idx] += GAMMA * dot(grad_face, Tf); // Source term contribution for owner cell
-			b[Fsol_idx] += -GAMMA * dot(grad_face, Tf); // Source term contribution for neighbor cell (negative of owner contribution)
+			PetscScalar val_bC = GAMMA * dot(grad_face, Tf);
+			PetscScalar val_bF = -GAMMA * dot(grad_face, Tf);
+
+			PetscCall(VecSetValues(*b, 1, &Csol_idx, &val_bC, ADD_VALUES));
+			PetscCall(VecSetValues(*b, 1, &Fsol_idx, &val_bF, ADD_VALUES));
+
+			//b[Csol_idx] += GAMMA * dot(grad_face, Tf); // Source term contribution for owner cell
+			//b[Fsol_idx] += -GAMMA * dot(grad_face, Tf); // Source term contribution for neighbor cell (negative of owner contribution)
 		}
 	}
 
@@ -260,13 +288,15 @@ int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes
 
 		double Q = Q_C(c->xc, c->yc, c->zc);
 
-		b[i] += Q * c->volume;
+		PetscScalar val_bC = Q * c->volume;
+		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
+		//b[i] += Q * c->volume;
 	}
 
 	return 0;
 }
 
-int build_advection(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 
@@ -296,35 +326,59 @@ int build_advection(double* A, double* b, double* phi, double* grad, node* nodes
 
 		if (f->boundary_face)
 		{
-			// For outflow case (mdotf will be positive), normal contribution 
-			A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
+			// For outflow case (mdotf will be positive), normal contribution
+			PetscScalar val_aCC = fmax(mdot_f, 0.0);
+			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val_aCC, ADD_VALUES));
+
+			//A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
 
 			//inflow case (mdotf is negative), boundary flux added to RHS
-			b[Csol_idx] += fmax(-mdot_f, 0) * phi[F_idx];
+			PetscScalar val_bC = fmax(-mdot_f, 0) * phi[F_idx];
+			PetscCall(VecSetValues(*b, 1, &Csol_idx, &val_bC, ADD_VALUES));
+
+			//b[Csol_idx] += fmax(-mdot_f, 0) * phi[F_idx];
 		}
 		else
 		{
 			
-			//Assign contribution to owner cell
-			A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
-			A[IDX(Csol_idx, Fsol_idx, NSOLCELLS)] += -fmax(-mdot_f, 0.0);
+			//Add contribution to owner cell
+			PetscScalar val_aCC = fmax(mdot_f, 0.0);
+			PetscScalar val_aCF = -fmax(-mdot_f, 0.0);
+
+			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val_aCC, ADD_VALUES));
+			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Fsol_idx, &val_aCF, ADD_VALUES));
+
+			/* A[IDX(Csol_idx, Csol_idx, NSOLCELLS)] += fmax(mdot_f, 0.0);
+			A[IDX(Csol_idx, Fsol_idx, NSOLCELLS)] += -fmax(-mdot_f, 0.0); */
 
 			//Assign contributions to neighbor cell
-			A[IDX(Fsol_idx, Fsol_idx, NSOLCELLS)] += fmax(-mdot_f, 0.0);
-			A[IDX(Fsol_idx, Csol_idx, NSOLCELLS)] += -fmax(mdot_f, 0.0);
+			PetscScalar val_aFF = fmax(-mdot_f, 0.0); 
+			PetscScalar val_aFC = -fmax(mdot_f, 0.0);
 
+			PetscCall(MatSetValues(*A, 1, &Fsol_idx, 1, &Fsol_idx, &val_aFF, ADD_VALUES));
+			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val_aFC, ADD_VALUES));
+
+			/* A[IDX(Fsol_idx, Fsol_idx, NSOLCELLS)] += fmax(-mdot_f, 0.0);
+			A[IDX(Fsol_idx, Csol_idx, NSOLCELLS)] += -fmax(mdot_f, 0.0);
+ */
 			//Assign Source term/RHS contributions (replace with
 			// function that changes for a selected scheme)
-			b[Csol_idx] += 0.0;
-			b[Fsol_idx] += 0.0;
+			/* b[Csol_idx] += 0.0;
+			b[Fsol_idx] += 0.0; */
 
 			// Calculate phi at the face based on higher order scheme
 			double phi_f_U = phi2face(phi[C_idx], phi[F_idx], mdot_f, grad, cell_C, cell_F, f, UPWIND); // upwind scheme face value
 			double phi_f_HO = phi2face(phi[C_idx], phi[F_idx], mdot_f, grad, cell_C, cell_F, f, ADVECTION_SCHEME); //high order face value
 
 			// Add high order scheme contribution to cell RHS
-			b[Csol_idx] += -mdot_f * (phi_f_HO - phi_f_U);
-			b[Fsol_idx] += mdot_f * (phi_f_HO - phi_f_U);
+			PetscScalar val_bC = -mdot_f * (phi_f_HO - phi_f_U);
+			PetscScalar val_bF = mdot_f * (phi_f_HO - phi_f_U);
+
+			PetscCall(VecSetValues(*b, 1, &Csol_idx, &val_bC, ADD_VALUES));
+			PetscCall(VecSetValues(*b, 1, &Csol_idx, &val_bF, ADD_VALUES));
+
+/* 			b[Csol_idx] += -mdot_f * (phi_f_HO - phi_f_U);
+			b[Fsol_idx] += mdot_f * (phi_f_HO - phi_f_U); */
 		}
 
 	}
@@ -614,7 +668,7 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 	return phi_f;
 }
 
-int calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual)
+int calc_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual)
 {
 	// Residual of equation Ax=b, should go to zero as solution converges. Can be used to check for convergence and also for debugging to make sure residual is decreasing after each iteration. Note that this is not the same as epsilon which is the maximum % change in phi values between iterations, but they should be correlated.
 	double residual = 0.0;
@@ -623,6 +677,51 @@ int calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, i
 
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of solution cells (non-boundary/degenerate cells)
 	
+	Vec phi_vec;
+	Vec residual_vec;
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &phi_vec));
+	PetscCall(VecSetSizes(phi_vec, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(phi_vec));
+	PetscCall(VecDuplicate(phi_vec, &residual_vec)); // Create vector fore residual
+	
+	// Set values of phi vector
+	PetscScalar *phi_array; 
+	PetscCall(VecGetArray(phi_vec, &phi_array)); //set phi_vec to point to phi_array
+
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		phi_array[i] = phi[i + *NDEGEN_CELLS];
+	}
+
+	PetscCall(VecRestoreArray(phi_vec, &phi_array));
+
+	// Compute A*phi and store in residual_vec
+	PetscCall(MatMult(*A, phi_vec, residual_vec));
+	// Subtract b from residual_vec to get A*phi - b
+	PetscCall(VecAXPY(residual_vec, -1.0, *b));
+	PetscCall(VecAbs(residual_vec)); // Take absolute value of residual vector
+	PetscScalar res_sum;
+	PetscCall(VecSum(residual_vec, &res_sum)); // Sum of absolute values
+
+	// Compute Scaling factor as sum of absolute values of aC*phi for all cells, where aC is the diagonal coefficient for each cell in A. This will help to prevent issues with very small or large residual values when scaling.
+	// Create vector to store diagonal of A matrix
+	Vec diagA;
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &diagA));
+	PetscCall(VecSetSizes(diagA, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(diagA));
+
+	// Get diagonal of A matrix
+	PetscCall(MatGetDiagonal(*A, diagA));
+
+	// Multiply diagonal of A with phi
+	PetscCall(VecAXPY(diagA, 1.0, phi_vec));
+
+	// Sum absolute values to get scaling factor
+	PetscScalar scaling_sum;
+	PetscCall(VecAbs(diagA)); // Take absolute value of diagA vector
+	PetscCall(VecSum(diagA, &scaling_sum)); // Sum of absolute values
+
+	/* 
 	for (int i=0; i < NSOLCELLS; i++)
 	{
 		cell* C = &cells[i + (*NDEGEN_CELLS)]; //current cell, adjust index to account for degenerate cells at beginning of cells array
@@ -656,9 +755,9 @@ int calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, i
 		double res_i = aFphiF_sum + aC * phi[C->id] - b[i]; // Residual for cell C
 		residual += fabs(res_i);
 		scaling_factor += fabs(aC * phi[C->id]);
-	}
+	} */
 
-	*scaled_residual = residual / fmax(scaling_factor, 1e-10); // Scale residual to prevent issues with very small or large values
+	*scaled_residual = res_sum / fmax(scaling_sum, 1e-10); // Scale residual to prevent issues with very small or large values
 
 	return 0;
 }
@@ -666,7 +765,7 @@ int calc_Residual(double* A, double* b, double* phi, cell* cells, face* faces, i
 /* -------------------------------------------------------------------------- */
 /* Transient Routines */
 /* -------------------------------------------------------------------------- */
-int calc_time_step(cell* cells, double* A, int* NCELLS, int* NDEGEN_CELLS, double* t, double* min_dt)
+int calc_time_step(cell* cells, Mat* A, int* NCELLS, int* NDEGEN_CELLS, double* t, double* min_dt)
 {
 	// If implicit, just return user specified timestep
 	if (!EXPLICIT)
@@ -681,12 +780,24 @@ int calc_time_step(cell* cells, double* A, int* NCELLS, int* NDEGEN_CELLS, doubl
 
 	*min_dt = INFINITY; 
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	
+	// Create vector to store diagonal of A matrix
+	Vec diagA;
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &diagA));
+	PetscCall(VecSetSizes(diagA, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(diagA));
+
+	PetscCall(MatGetDiagonal(*A, diagA));
 
 	for (int i = 0; i < NSOLCELLS; i++)
 	{
 		cell* C = &cells[i + (*NDEGEN_CELLS)];
-		double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
+		PetscScalar aC;
+		PetscCall(VecGetValues(diagA, 1, &i, &aC));
+		
+		//double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
 
+		
 		if (aC > 0)
 		{
 			double dt_C = CFL* RHO * C->volume / aC; // Time step based on diffusion stability criterion for cell C
@@ -712,7 +823,7 @@ int calc_time_step(cell* cells, double* A, int* NCELLS, int* NDEGEN_CELLS, doubl
 	return 0;
 }
 
-int build_transient(double* A, double* b, double* phi, cell* cells, int* NCELLS, int* NDEGEN_CELLS, double dt)
+int build_transient(Mat* A, Vec* b, double* phi, cell* cells, int* NCELLS, int* NDEGEN_CELLS, double dt)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
 	for (int i = 0; i < NSOLCELLS; i++)
@@ -721,14 +832,19 @@ int build_transient(double* A, double* b, double* phi, cell* cells, int* NCELLS,
 		double fluxC = RHO * C->volume / dt;
 		double fluxC_old = -RHO * C->volume / dt;
 
-		A[IDX(i, i, NSOLCELLS)] += fluxC; // Add contribution to diagonal coefficient for cell C
-		b[i] += -fluxC_old * phi[C->id]; // Add contribution to source term for cell C
+		PetscScalar val_aCC = fluxC;
+		PetscCall(MatSetValues(*A, 1, &i, 1, &i, &val_aCC, ADD_VALUES));
+		//A[IDX(i, i, NSOLCELLS)] += fluxC; // Add contribution to diagonal coefficient for cell C
+		
+		PetscScalar val_bC = -fluxC_old * phi[C->id];
+		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
+		//b[i] += -fluxC_old * phi[C->id]; // Add contribution to source term for cell C
 
 	}
 	return 0;
 }
 
-int explicit_update(double* A, double* b, double* phi, cell* cells, face* faces, double* dt, int* NCELLS, int* NDEGEN_CELLS)
+int explicit_update(Mat* A, Vec* b, double* phi, cell* cells, face* faces, double* dt, int* NCELLS, int* NDEGEN_CELLS)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
 
@@ -741,11 +857,47 @@ int explicit_update(double* A, double* b, double* phi, cell* cells, face* faces,
 	}
 	phi_new = memcpy(phi_new, phi, (NEQNS * *NCELLS) * sizeof(double));
 
+	// Create vector to store diagonal of A matrix
+	Vec phi_vec;
+	Vec L_vec; 
+	Vec phi_new_vec;
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &phi_vec));
+	PetscCall(VecSetSizes(phi_vec, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(phi_vec));
+	PetscCall(VecDuplicate(phi_vec, &L_vec)); // Create solution vector xp with same size as bp
+	PetscCall(VecDuplicate(phi_vec, &phi_new_vec)); // Create solution vector xp with same size as bp
+
+	// Set values of phi vector
+	PetscScalar *phi_array; 
+	PetscCall(VecGetArray(phi_vec, &phi_array)); //set phi_vec to point to phi_array
+
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		phi_array[i] = phi[i + *NDEGEN_CELLS];
+	}
+
+	PetscCall(VecRestoreArray(phi_vec, &phi_array));
+
+	// Calculate L, spatial operator term
+	PetscCall(MatMult(*A, phi_vec, L_vec));
+	PetscCall(L_vec, -1.0, *b);
+
+	// Calculate phi new 
+	PetscCall(VecWAXPY(phi_new_vec, -(*dt)/(RHO), L_vec, phi_vec)); // phi_new_vec = -dt/(RHO*C->volume)*L_vec + phi_vec
+	
 	for (int i = 0; i < NSOLCELLS; i++)
 	{
 		cell* C = &cells[i + (*NDEGEN_CELLS)]; //current cell, adjust index to account for degenerate cells at beginning of cells array
 
-		double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
+		PetscScalar phi_new_i;
+		PetscScalar L_i;
+		PetscCall(VecGetValues(L_vec, 1, &i, &L_i));
+		PetscCall(VecGetValues(phi_new_vec, 1, &i, &phi_new_i));
+		phi_new[C->id] = -(*dt) * L_i / (RHO * C->volume) + phi[C->id]; // Explicit Euler
+
+		/* PetscScalar aC;
+		PetscCall(VecGetValues(diagA, 1, &i, &aC));
+		//double aC = A[IDX(i, i, NSOLCELLS)]; // Diagonal coefficient for cell C
 		double aFphiF_sum = 0.0;
 
 		// loop over faces to sum a_i*phi_i for the cell C
@@ -761,30 +913,9 @@ int explicit_update(double* A, double* b, double* phi, cell* cells, face* faces,
 			aFphiF_sum += aF * phi[j + (*NDEGEN_CELLS)]; // Add contribution from neighbor cell j to sum
 		}
 
-		//for (int j = 0; j < C->num_faces; j++)
-		//{
-		//	face* f = &faces[C->face_ids[j]];
+		double L = aC * phi[C->id] + aFphiF_sum - b[i]; //spatial operator (all discretized non transient terms) */
 
-		//	if (f->owner == C->id)
-		//	{
-		//		if (f->boundary_face)
-		//		{
-		//			// For boundary faces, the neighbor cell is not included in the solution and should not be included in the residual calculation since its value is determined by the boundary condition, not by solving the linear system. So we can skip this face for the residual calculation.
-		//			continue;
-		//		}
-		//		double aF = A[IDX(i, f->neighbor - (*NDEGEN_CELLS), NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell F
-		//		aFphiF_sum += aF * phi[f->neighbor];
-		//	}
-		//	else if (f->neighbor == C->id)
-		//	{
-		//		double aF = A[IDX(i, f->owner - (*NDEGEN_CELLS), NSOLCELLS)]; // Off-diagonal coefficient for neighbor cell F
-		//		aFphiF_sum += aF * phi[f->owner];
-		//	}
-		//}
-
-		double L = aC * phi[C->id] + aFphiF_sum - b[i]; //spatial operator (all discretized non transient terms)
-
-		phi_new[C->id] = phi[C->id] - *dt * L / (RHO * C->volume); // Explicit Euler update for phi at cell C
+		//phi_new[C->id] = phi[C->id] - *dt * L / (RHO * C->volume); // Explicit Euler update for phi at cell C
 	}
 
 	// Update phi array with new values

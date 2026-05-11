@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <petscksp.h>
 #include "grid.h"
 #include "setup.h"
 #include "math_helpers.h"
@@ -28,12 +29,14 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 /* -------------------------------------------------------------------------- */
 /* Diffusion Routines */
 /* -------------------------------------------------------------------------- */
-int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+//int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 
 /* -------------------------------------------------------------------------- */
 /* Advection Routines */
 /* -------------------------------------------------------------------------- */
-int build_advection(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+//int build_advection(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 
 double phi2face(double phi_owner,
 	double phi_neighbor,
@@ -46,19 +49,19 @@ double phi2face(double phi_owner,
 /* -------------------------------------------------------------------------- */
 /* Transient Routines */
 /* -------------------------------------------------------------------------- */
-int calc_time_step(cell* cells, double* A, int* NCELLS, int* NDEGEN_CELLS, double* t, double* min_dt);
+int calc_time_step(cell* cells, Mat* A, int* NCELLS, int* NDEGEN_CELLS, double* t, double* min_dt);
 
-int build_transient(double* A, double* b, double* phi, cell* cells, int* NCELLS, int* NDEGEN_CELLS, double dt);
+int build_transient(Mat* A, Vec* b, double* phi, cell* cells, int* NCELLS, int* NDEGEN_CELLS, double dt);
 
-int explicit_update(double* A, double* b, double* phi, cell* cells, face* faces, double* dt, int* NCELLS, int* NDEGEN_CELLS);
+int explicit_update(Mat* A, Vec* b, double* phi, cell* cells, face* faces, double* dt, int* NCELLS, int* NDEGEN_CELLS);
 
 /* -------------------------------------------------------------------------- */
 /* Stopping Criteria Routines */
 /* -------------------------------------------------------------------------- */
 int maxChng(double* phi, double* phi_old, int* NCELLS, int* NDEGEN_CELLS, double* epsilon);
 
-int calc_Residual(double* A,
-	double* b,
+int calc_Residual(Mat* A,
+	Vec* b,
 	double* phi,
 	cell* cells,
 	face* faces,
