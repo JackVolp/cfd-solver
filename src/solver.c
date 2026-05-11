@@ -356,7 +356,7 @@ int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell
 			PetscScalar val_aFC = -fmax(mdot_f, 0.0);
 
 			PetscCall(MatSetValues(*A, 1, &Fsol_idx, 1, &Fsol_idx, &val_aFF, ADD_VALUES));
-			PetscCall(MatSetValues(*A, 1, &Csol_idx, 1, &Csol_idx, &val_aFC, ADD_VALUES));
+			PetscCall(MatSetValues(*A, 1, &Fsol_idx, 1, &Csol_idx, &val_aFC, ADD_VALUES));
 
 			/* A[IDX(Fsol_idx, Fsol_idx, NSOLCELLS)] += fmax(-mdot_f, 0.0);
 			A[IDX(Fsol_idx, Csol_idx, NSOLCELLS)] += -fmax(mdot_f, 0.0);

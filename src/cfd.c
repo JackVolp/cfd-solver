@@ -103,6 +103,8 @@ int main(int argc, char **argv)
 	PC pc;		// preconditioner object
 
 	// Create PETSc matrix and vectors, and KSP solver context here, and solve the linear system using PETSc. This will require converting the matrix A and vector b into the appropriate PETSc formats (e.g., sparse format for A). You can use the PETSc functions MatSetValues and VecSetValues to populate the matrix and vector, and then call KSPSolve to solve the system. Remember to destroy the PETSc objects after use to free memory.
+	// PETSC_COMM_WORLD tells Petsc to use all process in a given run
+	// PETSC Decide tells petsc to decide itself how the vector is stored
 	// matrix A
 	PetscCall(MatCreate(PETSC_COMM_WORLD, &A));
 	PetscCall(MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, NSOLCELLS, NSOLCELLS));
@@ -110,7 +112,7 @@ int main(int argc, char **argv)
 	PetscCall(MatSetUp(A));
 	// vector b
 	PetscCall(VecCreate(PETSC_COMM_WORLD, &b));
-	PetscCall(VecSetSizes(b, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetSizes(b, PETSC_DECIDE, NSOLCELLS)); 
 	PetscCall(VecSetFromOptions(b));
 	PetscCall(VecDuplicate(b, &xp)); // Create solution vector xp with same size as bp
 
@@ -133,6 +135,7 @@ int main(int argc, char **argv)
 
 	/*-------- Create and apply boundary conditions--------*/
 	// Initialize boundaries (change to allocate for more complex gemoetry)
+	// probably move this to setup somehow also
 	boundary boundaries[3]; // boundaries
 	boundaryType hw2_boundaries[3] = {Dirichlet, Neumann, Dirichlet};
 
@@ -329,9 +332,13 @@ int main(int argc, char **argv)
 		PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp));
 		PetscCall(KSPSetOperators(ksp, A, A));
 
-		PetscCall(KSPGetPC(ksp, &pc));
-		PetscCall(PCSetType(pc, PCILU));	  // set ilu as default preconditioner
-		PetscCall(KSPSetType(ksp, KSPGMRES)); // default solve with gmres
+		if (!PCMPIServerActive)
+		{
+			PetscCall(KSPGetPC(ksp, &pc));
+			PetscCall(PCSetType(pc, PCILU));	  // set ilu as default preconditioner
+			PetscCall(KSPSetType(ksp, KSPGMRES)); // default solve with gmres
+		}
+		
 
 		// allow for settings override at runtime
 		PetscCall(KSPSetFromOptions(ksp));
@@ -340,14 +347,14 @@ int main(int argc, char **argv)
 
 		// copy solution back to phi
 		const PetscScalar *xarray;
-		PetscCall(VecGetArrayRead(xp, &xarray));
-
+		PetscCall(VecGetArrayRead(xp, &xarray)); // get pointer to values inside xp vector
+		// VecGetArray lets you change the values inside while VecGetArrayRead lets you only read them I think
 		for (int j = 0; j < NSOLCELLS; j++)
 		{
 			phi[j + NDEGEN_CELLS] = xarray[j];
 		}
 
-		PetscCall(VecRestoreArrayRead(xp, &xarray));
+		PetscCall(VecRestoreArrayRead(xp, &xarray)); // close access to the values
 
 		/* -------------------------------------------------------------------------- */
 
