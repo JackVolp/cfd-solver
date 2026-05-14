@@ -322,7 +322,7 @@ int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* c
 }
 
 /* -------------------------------------------------------------------------- */
-/*          Routine to add advection term contribution div(rho*u*phi          */
+/*          Routine to add advection term contribution div(rho*u*phi)         */
 /* -------------------------------------------------------------------------- */
 int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
