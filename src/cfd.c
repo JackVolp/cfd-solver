@@ -227,6 +227,13 @@ int main(int argc, char **argv)
 			return 1;
 		}
 
+		err = build_source(&A, &b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+		if (err != 0)
+		{
+			fprintf(stderr, "build_source failed with error code %d\n", err);
+			return 1;
+		}
+
 		err = build_advection(&A, &b, phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 		if (err != 0)
 		{

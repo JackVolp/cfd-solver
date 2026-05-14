@@ -46,6 +46,12 @@ double phi2face(double phi_owner,
 	cell* neighbor,
 	face* f,
 	advectionScheme scheme);
+
+/* -------------------------------------------------------------------------- */
+/*                             Source Term routine                            */
+/* -------------------------------------------------------------------------- */
+int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+
 /* -------------------------------------------------------------------------- */
 /* Transient Routines */
 /* -------------------------------------------------------------------------- */

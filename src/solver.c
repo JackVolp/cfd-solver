@@ -127,6 +127,9 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 }
 
 
+/* -------------------------------------------------------------------------- */
+/*              Diffusion term matrix contribution \nabla^2 \phi              */
+/* -------------------------------------------------------------------------- */
 // this function also updates the gradient vector at the boundary /degenerate cell indicies with the gradients at the boundary faces. This should prob be in a different function
 int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
@@ -282,6 +285,28 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell
 	/* Move this section below (init b) to its own function called build source */
 	/* -------------------------------------------------------------------------- */
 	//initialize b with the energy source term for all cells
+	/* for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* c = &cells[i+(*NDEGEN_CELLS)];
+
+		double Q = Q_C(c->xc, c->yc, c->zc);
+
+		PetscScalar val_bC = Q * c->volume;
+		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
+		//b[i] += Q * c->volume;
+	}
+
+	return 0; */
+	return 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                   Soure term matrix contribution routine                   */
+/* -------------------------------------------------------------------------- */
+int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
+
 	for (int i = 0; i < NSOLCELLS; i++)
 	{
 		cell* c = &cells[i+(*NDEGEN_CELLS)];
@@ -296,6 +321,9 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell
 	return 0;
 }
 
+/* -------------------------------------------------------------------------- */
+/*          Routine to add advection term contribution div(rho*u*phi          */
+/* -------------------------------------------------------------------------- */
 int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
