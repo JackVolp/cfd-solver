@@ -280,23 +280,6 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell
 			//b[Fsol_idx] += -GAMMA * dot(grad_face, Tf); // Source term contribution for neighbor cell (negative of owner contribution)
 		}
 	}
-
-	/* -------------------------------------------------------------------------- */
-	/* Move this section below (init b) to its own function called build source */
-	/* -------------------------------------------------------------------------- */
-	//initialize b with the energy source term for all cells
-	/* for (int i = 0; i < NSOLCELLS; i++)
-	{
-		cell* c = &cells[i+(*NDEGEN_CELLS)];
-
-		double Q = Q_C(c->xc, c->yc, c->zc);
-
-		PetscScalar val_bC = Q * c->volume;
-		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
-		//b[i] += Q * c->volume;
-	}
-
-	return 0; */
 	return 0;
 }
 

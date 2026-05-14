@@ -1,7 +1,6 @@
 #ifndef MATH_HELPERS_H
 #define MATH_HELPERS_H
 
-
 #define dot(a,b) (a[0]*b[0] + a[1]*b[1] + a[2]*b[2])
 //magnitude macro, a lot easier to use than the function 
 #define mag(a) (sqrt(a[0]*a[0] + a[1]*a[1] + a[2]*a[2])) 
@@ -19,5 +18,6 @@ void solve_2x2_system(double A11,
 	double* x1,
 	double* x2);
 
+bool all_greater_than_or_eq(double* a, int size, double threshold);
 
 #endif // !MATH_HELPERS_H
