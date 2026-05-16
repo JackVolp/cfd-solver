@@ -18,15 +18,6 @@
 //#define vecIDX(i,j,nx) ( (j)*(nx) + (i) ) //indexing for vectors stored in row major format as [x1,x2,...,xn,y1,y2,...yn,z1,z2,...zn]. nx is number of cells in this case. All the x-dirs, then all the y dirs, then all the z-dirs. I is the index of phi and j is the index of the direction (0,1,2 for x,y,z respectively)
 
 /* -------------------------------------------------------------------------- */
-/* Gradient Routines */
-/* -------------------------------------------------------------------------- */
-// Compute Gradient 
-int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad);
-
-//Interpolate Gradient
-int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f);
-
-/* -------------------------------------------------------------------------- */
 /* Diffusion Routines */
 /* -------------------------------------------------------------------------- */
 //int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
@@ -46,6 +37,23 @@ double phi2face(double phi_owner,
 	cell* neighbor,
 	face* f,
 	advectionScheme scheme);
+
+/* -------------------------------------------------------------------------- */
+/*                       Known Scalar Operator Routines                       */
+/* -------------------------------------------------------------------------- */
+/* -------------------------- Numerical Divergence -------------------------- */
+int build_div(Mat* A, Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+
+/* --------------------------- Numerical Laplacian -------------------------- */
+int build_lap(Mat* A, Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+
+/* --------------------------- Numerical Gradient --------------------------- */
+int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad);
+
+//Interpolate Gradient
+int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f);
+
+/* -------------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------- */
 /*                             Source Term routine                            */

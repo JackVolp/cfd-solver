@@ -934,3 +934,164 @@ int explicit_update(Mat* A, Vec* b, double* phi, cell* cells, face* faces, doubl
 	free(phi_new);
 	return 0;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                       Known Scalar Operator Routines                       */
+/* -------------------------------------------------------------------------- */
+/* --------------------------- Numerical Gradient --------------------------- */
+int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
+	int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
+
+{	// Initialize gradient coefficint matrix to zero (See eq. 9.27)
+	// Number of cells w/ volume
+	int NVOL_CELLS = (*NCELLS) - (*NDEGEN_CELLS);
+
+	// A12 and A21 are the same matrix so only need to allocate one of them
+	double* A11 = malloc(NVOL_CELLS * sizeof(double));
+	if (A11 == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for A11 array.\n");
+		return 1;
+	}
+
+	double* A12 = malloc(NVOL_CELLS * sizeof(double));
+	if (A12 == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for A12 array.\n");
+		free(A11); // Free previously allocated A11 before exiting
+		return 1;
+	}
+
+	double* A22 = malloc(NVOL_CELLS * sizeof(double));
+	if (A22 == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for A22 array.\n");
+		free(A11); // Free previously allocated A11 before exiting
+		free(A12); // Free previously allocated A12 before exiting
+		return 1;
+	}
+
+	// Initialize B vector for least squares gradient calculation, size is NCELLS x 2 (x and y components)
+	double* b = malloc(NVOL_CELLS * sizeof(double) * 2);
+	if (b == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for b1 array.\n");
+		free(A11); // Free previously allocated A11 before exiting
+		free(A12); // Free previously allocated A12 before exiting
+		free(A22); // Free previously allocated A22 before exiting
+		return 1;
+	}
+
+
+	// Initialize coefficients to zero
+	memset(A11, 0, NVOL_CELLS * sizeof(double));
+	memset(A12, 0, NVOL_CELLS * sizeof(double));
+	memset(A22, 0, NVOL_CELLS * sizeof(double));
+	memset(b, 0, NVOL_CELLS * sizeof(double) * 2);
+
+	// Loop over all faces and calculate contributions to gradient coefficient matrices
+	for (int i = 0; i < *NFACES; i++)
+	{
+		face* f = &faces[i];
+
+		//if (f->neighbor == -1)
+		//{
+		//	// Boundary face, skip for now (will need to apply boundary conditions later)
+		//	continue;
+		//}
+
+		cell* C = &cells[f->owner];
+		cell* F = &cells[f->neighbor];
+
+		// Indicies for arrays with size of volume cells 
+		int vC_idx = C->id - *NDEGEN_CELLS;
+		int vF_idx = F->id - *NDEGEN_CELLS;
+
+		//Define rCF 
+		double dxk = F->xc - C->xc;
+		double dyk = F->yc - C->yc;
+		//double dzk = f->zc - C->zc;
+
+		double dphi = phi[IDX(F->id, 0, *NCELLS)] - phi[IDX(C->id, 0, *NCELLS)];
+
+		// Compute Weight
+		double w = 1.0 / sqrt(dxk * dxk + dyk * dyk);
+
+		// Update A11, A12, A22, and b for owner cell
+		A11[vC_idx] += w * dxk * dxk;
+		A12[vC_idx] += w * dxk * dyk; // same as A21
+		A22[vC_idx] += w * dyk * dyk;
+
+		// Update b for owner cell
+		b[IDX(vC_idx,0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
+		b[IDX(vC_idx,1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
+
+		// Update A11, A12, A22, and b for neighbor cell if the neighbor cell is not degenerate. Neighbor will be degenerate for boundary cells.
+		if (!f->boundary_face)
+		{
+			A11[vF_idx] += w * dxk * dxk;
+			A12[vF_idx] += w * dxk * dyk; // same as A21
+			A22[vF_idx] += w * dyk * dyk;
+
+			// Update b for neighbor cell
+			b[IDX(vF_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
+			b[IDX(vF_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
+		}
+
+
+
+	}
+
+	// Loop over all cells and solve for gradient
+	for (int i = 0; i < NVOL_CELLS; i++)
+	{
+		int cell_id = i + *NDEGEN_CELLS; // Adjust index to account for degenerate cells at the beginning of the cells array
+
+		solve_2x2_system(A11[i], A12[i], A12[i], A22[i],
+			b[IDX(i, 0, NVOL_CELLS)], b[IDX(i, 1, NVOL_CELLS)],
+			&grad[IDX(0, cell_id, 3)], &grad[IDX(1, cell_id, 3)]); // Store gradient in correct location in grad array based on cell id
+		grad[IDX(2, cell_id, 3)] = 0.0;
+	}
+
+	// Free allocated memory for gradient coefficient matrices
+	free(A11);
+	free(A12);
+	free(A22);
+	free(b);
+	return 0;
+}
+
+/* -------------------------- Numerical Divergence -------------------------- 
+* This routine calculates the numerical divergence of a given scalar array phi
+* and adds it to the RHS b vector for that equation. The divergence array is not stored.
+ -------------------------------------------------------------------------- */
+int build_div(Mat* A, Vec* b, double* phi, int NCOMP, node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	/* Vec div_phi; 
+
+	// Create vector to store divergence of phi vector
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &div_phi));
+	PetscCall(VecSetSizes(div_phi, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(div_phi));
+
+	// Set all entries to zero 
+	PetscCall(VecZeroEntries(div_phi));	 */
+
+	// Loop over all faces and add contributions to the b vector for owner cell C and neighbor cell F
+	for (int i = 0; i < *NFACES; i++)
+	{
+		face* f = &faces[i]; //current face 
+
+		cell* C = &cells[f->owner]; //owner cell
+		cell* F = &cells[f->neighbor]; //neighbor cell
+
+		// Do not need a boundary face if statement since the values of the scalar at the boundary should be stored in phi
+		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
+
+
+
+
+	}
+
+}

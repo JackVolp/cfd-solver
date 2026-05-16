@@ -47,7 +47,7 @@ extern advectionScheme ADVECTION_SCHEME;
 #define DT 0.5 // time step size, only used when transient is true but explicit is false (inplicit stepping tstep size)
 #define T_FINAL 7.5 // Final time for transient simulation only used when transient
 #define SAVE_INTERVAL 0.5 // Time interval for saving output files, only used when transient
-
+#define ND = 2; // number of dimensions
 
 #define NEQNS 1 // Number of transport equations solved
 
