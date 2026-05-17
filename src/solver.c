@@ -4,134 +4,12 @@
 #include <math.h>
 #include <string.h>
 
-int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
-	int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad)
-
-{	// Initialize gradient coefficint matrix to zero (See eq. 9.27)
-	// Number of cells w/ volume
-	int NVOL_CELLS = (*NCELLS) - (*NDEGEN_CELLS);
-
-	// A12 and A21 are the same matrix so only need to allocate one of them
-	double* A11 = malloc(NVOL_CELLS * sizeof(double));
-	if (A11 == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for A11 array.\n");
-		return 1;
-	}
-
-	double* A12 = malloc(NVOL_CELLS * sizeof(double));
-	if (A12 == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for A12 array.\n");
-		free(A11); // Free previously allocated A11 before exiting
-		return 1;
-	}
-
-	double* A22 = malloc(NVOL_CELLS * sizeof(double));
-	if (A22 == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for A22 array.\n");
-		free(A11); // Free previously allocated A11 before exiting
-		free(A12); // Free previously allocated A12 before exiting
-		return 1;
-	}
-
-	// Initialize B vector for least squares gradient calculation, size is NCELLS x 2 (x and y components)
-	double* b = malloc(NVOL_CELLS * sizeof(double) * 2);
-	if (b == NULL)
-	{
-		fprintf(stderr, "Error: Memory allocation failed for b1 array.\n");
-		free(A11); // Free previously allocated A11 before exiting
-		free(A12); // Free previously allocated A12 before exiting
-		free(A22); // Free previously allocated A22 before exiting
-		return 1;
-	}
-
-
-	// Initialize coefficients to zero
-	memset(A11, 0, NVOL_CELLS * sizeof(double));
-	memset(A12, 0, NVOL_CELLS * sizeof(double));
-	memset(A22, 0, NVOL_CELLS * sizeof(double));
-	memset(b, 0, NVOL_CELLS * sizeof(double) * 2);
-
-	// Loop over all faces and calculate contributions to gradient coefficient matrices
-	for (int i = 0; i < *NFACES; i++)
-	{
-		face* f = &faces[i];
-
-		//if (f->neighbor == -1)
-		//{
-		//	// Boundary face, skip for now (will need to apply boundary conditions later)
-		//	continue;
-		//}
-
-		cell* C = &cells[f->owner];
-		cell* F = &cells[f->neighbor];
-
-		// Indicies for arrays with size of volume cells 
-		int vC_idx = C->id - *NDEGEN_CELLS;
-		int vF_idx = F->id - *NDEGEN_CELLS;
-
-		//Define rCF 
-		double dxk = F->xc - C->xc;
-		double dyk = F->yc - C->yc;
-		//double dzk = f->zc - C->zc;
-
-		double dphi = phi[IDX(F->id, 0, *NCELLS)] - phi[IDX(C->id, 0, *NCELLS)];
-
-		// Compute Weight
-		double w = 1.0 / sqrt(dxk * dxk + dyk * dyk);
-
-		// Update A11, A12, A22, and b for owner cell
-		A11[vC_idx] += w * dxk * dxk;
-		A12[vC_idx] += w * dxk * dyk; // same as A21
-		A22[vC_idx] += w * dyk * dyk;
-
-		// Update b for owner cell
-		b[IDX(vC_idx,0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
-		b[IDX(vC_idx,1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
-
-		// Update A11, A12, A22, and b for neighbor cell if the neighbor cell is not degenerate. Neighbor will be degenerate for boundary cells.
-		if (!f->boundary_face)
-		{
-			A11[vF_idx] += w * dxk * dxk;
-			A12[vF_idx] += w * dxk * dyk; // same as A21
-			A22[vF_idx] += w * dyk * dyk;
-
-			// Update b for neighbor cell
-			b[IDX(vF_idx, 0, NVOL_CELLS)] += w * dphi * dxk; // x component/row of b
-			b[IDX(vF_idx, 1, NVOL_CELLS)] += w * dphi * dyk; // y component/row of b
-		}
-
-
-
-	}
-
-	// Loop over all cells and solve for gradient
-	for (int i = 0; i < NVOL_CELLS; i++)
-	{
-		int cell_id = i + *NDEGEN_CELLS; // Adjust index to account for degenerate cells at the beginning of the cells array
-
-		solve_2x2_system(A11[i], A12[i], A12[i], A22[i],
-			b[IDX(i, 0, NVOL_CELLS)], b[IDX(i, 1, NVOL_CELLS)],
-			&grad[IDX(0, cell_id, 3)], &grad[IDX(1, cell_id, 3)]); // Store gradient in correct location in grad array based on cell id
-		grad[IDX(2, cell_id, 3)] = 0.0;
-	}
-
-	// Free allocated memory for gradient coefficient matrices
-	free(A11);
-	free(A12);
-	free(A22);
-	free(b);
-	return 0;
-}
-
 
 /* -------------------------------------------------------------------------- */
 /*              Diffusion term matrix contribution \nabla^2 \phi              */
 /* -------------------------------------------------------------------------- */
 // this function also updates the gradient vector at the boundary /degenerate cell indicies with the gradients at the boundary faces. This should prob be in a different function
-int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCoeff GAMMA,node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 	
@@ -502,7 +380,7 @@ int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double sca
 }
 
 int applyBoundary(boundary* b, cell* cells,
-	face* faces, double* phi, double* grad, int* NCELLS)
+	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int* NCELLS)
 {
 	// Loop over all faces in boundary and apply boundary conditions
 	for (int i = 0; i < b->num_faces; i++)
@@ -716,7 +594,7 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 		phi_f_tilde = 3. / 2. * phi_C_tilde;
 		break;
 	default:
-		printf(stderr, "Error: Unknown advection scheme: %d", scheme);
+		fprintf(stderr, "Error: Unknown advection scheme: %d", scheme);
 		return 1;
 	}
 
@@ -937,7 +815,7 @@ int explicit_update(Mat* A, Vec* b, double* phi, cell* cells, face* faces, doubl
 
 	// Calculate L, spatial operator term
 	PetscCall(MatMult(*A, phi_vec, L_vec));
-	PetscCall(L_vec, -1.0, *b);
+	PetscCall(VecAXPY(L_vec, -1.0, *b));
 
 	// Calculate phi new 
 	PetscCall(VecWAXPY(phi_new_vec, -(*dt)/(RHO), L_vec, phi_vec)); // phi_new_vec = -dt/(RHO*C->volume)*L_vec + phi_vec
@@ -1115,6 +993,7 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 * using IDX macro. 
 * This will be called for the continuity equation's RHS b vector, but it will use the
 * guessed momentum eqation's phi values and gradients to calcate the divergence of velocity
+* The vector must be defined at boundary faces and centroids.
  -------------------------------------------------------------------------- */
 int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
@@ -1204,19 +1083,22 @@ int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* 
 			jacobian_F[dims][2] = grad[eq_ids[dims]][IDX(2, F->id, 3)];
 
 			// interpolate gradients to face
-			grad2face(&jacobian_f_prime[dims], jacobian_C[dims], jacobian_F[dims], rCF, dCF, vec_C[dims], vec_F[dims], C, F, f);
+			grad2face(jacobian_f_prime[dims], jacobian_C[dims], jacobian_F[dims], rCF, dCF, vec_C[dims], vec_F[dims], C, F, f);
 
 			// Correct face values for skewness
 			vec_f[dims] = vec_f_prime[dims] + dot(jacobian_f_prime[dims], r_f_prime_f); 
 		}
 
 		// Calculate and add RHS vector contributions
+		int C_sol_idx = C->id - *NDEGEN_CELLS; // index of cell C in solution arrays, adjust for degenerate cells
+		int F_sol_idx = F->id - *NDEGEN_CELLS; // index of cell F in solution arrays, adjust for degenerate cells
+
 		PetscScalar val_bC = dot(vec_f, Sf); // contribution to owner cell C
-		 PetscCall(VecSetValues(*b, 1, &C->id, &val_bC, ADD_VALUES));
+		 PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
 		//b[C->id] += dot(vec_f, Sf); // contribution to owner
 
 		PetscScalar val_bF = -dot(vec_f, Sf); // contribution to neighbor cell F (negative since normal vector points outward from owner cell)
-		 PetscCall(VecSetValues(*b, 1, &F->id, &val_bF, ADD_VALUES));
+		 PetscCall(VecSetValues(*b, 1, &F_sol_idx, &val_bF, ADD_VALUES));
 		//b[F->id] += -dot(vec_f, Sf); // contribution to neighbor cell F
 	}	
 
@@ -1226,11 +1108,64 @@ int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* 
 /* --------------------------- Numerical Laplacian -------------------------- 
 * Numerical laplacian operator. Operates on a known scalar field phi
 * and adds contributions to the RHS b vector for that equation. The laplacian
-* array is not stored. Not technically laplacian becasue it also includes a 
-* diffusion coefficient for adding to the RHS. For a pure laplacian operator,
-* the diffusion coefficient should be set to 1.0.
+* array is not stored. Not technically only laplacian becasue it also includes a 
+* coefficient for adding to the RHS. For a pure laplacian operator, the
+* coefficient should be set to 1.0. The coefficient is included for to add the
+* stabilization factor epsilon. The scalar must be defined at boundary faces and
+* centroids.
  -------------------------------------------------------------------------- */
-int build_lap(Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_lap(Vec* b, double* phi, double* grad, double coeff, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
+	// Loop over all faces and add contributions to the b vector for owner cell C and neighbor cell F
+	for (int i = 0; i < *NFACES; i++)
+	{
+		face* f = &faces[i]; //current face 
 
+		cell* C = &cells[f->owner]; //owner cell
+		cell* F = &cells[f->neighbor]; //neighbor cell
+
+		// Calculate position vectors/ Geometry stuff
+		double rCF[3] = {
+			F->xc - C->xc,
+			F->yc - C->yc,
+			F->zc - C->zc
+		}; // position vector from cell C centroid to cell F centroid
+
+		double dCF = mag(rCF); // distance between cell centroids
+
+		// Calculate rf' position vector
+		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
+		double Sf_mag = mag(Sf); // magnitude of face area vector
+		double ef[3] = {Sf[0]/Sf_mag, Sf[1]/Sf_mag, Sf[2]/Sf_mag}; // Normal vector of face
+
+		// Calculate gradient at face using grad2face
+		double grad_C[3] = {
+			grad[3*C->id],
+			grad[3*C->id + 1],
+			grad[3*C->id + 2]
+		};
+
+		double grad_F[3] = {
+			grad[3*F->id],
+			grad[3*F->id + 1],
+			grad[3*F->id + 2]
+		};
+
+		double grad_f[3];
+		grad2face(grad_f, grad_C, grad_F, rCF, dCF, phi[C->id], phi[F->id], C, F, f); // Gradient at face centroid
+
+		// dot gradient with surface vector
+		PetscScalar val_bC = coeff * dot(grad_f, Sf);
+		PetscScalar val_bF = -coeff * dot(grad_f, Sf); // negative since normal vector points outward from owner cell
+
+		// Add RHS contributions to b vector for owner cell C and neighbor cell F
+		// index for solution arrays, dont include boundary faces 
+		int C_sol_idx = C->id - *NDEGEN_CELLS; 
+		int F_sol_idx = F->id - *NDEGEN_CELLS; 
+		PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
+		PetscCall(VecSetValues(*b, 1, &F_sol_idx, &val_bF, ADD_VALUES));
+		 //b[C->id] += coeff * dot(grad_f, Sf); // contribution to owner cell C
+		 //b[F->id] += -coeff * dot(grad_f, Sf); // contribution to neighbor cell F
+	}
+	return 0;
 }

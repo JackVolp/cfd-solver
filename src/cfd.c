@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 	{
 		for (int j = 0; j < NBOUNDARIES; j++)
 		{
-			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], &NCELLS);
+			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], GAMMA[i], &NCELLS);
 
 			if (err != 0)
 			{
@@ -237,7 +237,7 @@ int main(int argc, char **argv)
 			// Apply boundary conditions (sets phi on boundaries)
 			for (int k = 0; k < NBOUNDARIES; k++)
 			{
-				err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], &NCELLS);
+				err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], GAMMA[neqn], &NCELLS);
 
 				if (err != 0)
 				{
@@ -262,7 +262,7 @@ int main(int argc, char **argv)
 			/* memset(A, 0, (NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double));
 			memset(b, 0, ((NEQNS * NSOLCELLS) * sizeof(double))); */
 
-			err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+			err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 			if (err != 0)
 			{
 				fprintf(stderr, "build_diffusion failed with error code %d\n", err);

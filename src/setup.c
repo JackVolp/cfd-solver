@@ -50,3 +50,6 @@ double zero_flux(const boundary* b, const face* f, double t)
 /* -------------------------------------------------------------------------- */
 //advectionScheme ADVECTION_SCHEME = UPWIND;
 advectionScheme ADVECTION_SCHEME = SMART;
+
+/***************** Diffusion Coefficients for each equation *****************/
+diffusionCoeff GAMMA[NEQNS] = {0.0};

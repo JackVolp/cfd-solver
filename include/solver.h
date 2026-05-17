@@ -21,8 +21,7 @@
 /* Diffusion Routines */
 /* -------------------------------------------------------------------------- */
 //int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
-int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
-
+int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCoeff GAMMA,node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 /* -------------------------------------------------------------------------- */
 /* Advection Routines */
 /* -------------------------------------------------------------------------- */
@@ -42,11 +41,10 @@ double phi2face(double phi_owner,
 /*                       Known Scalar Operator Routines                       */
 /* -------------------------------------------------------------------------- */
 /* -------------------------- Numerical Divergence -------------------------- */
-int build_div(Mat* A, Vec* b, double** phi, double** grad, int eq_ids[static ND], node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 
 /* --------------------------- Numerical Laplacian -------------------------- */
-int build_lap(Mat* A, Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
-
+int build_lap(Vec* b, double* phi, double* grad, double coeff, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 /* --------------------------- Numerical Gradient --------------------------- */
 int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad);
 
@@ -96,7 +94,7 @@ for neumann, only q_b used
 for robin phi_b and h_infty used
 */
 int applyBoundary(boundary* b, cell* cells,
-	face* faces, double* phi, double* grad, int* NCELLS);
+	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int* NCELLS);
 
 
 

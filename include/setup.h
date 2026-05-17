@@ -21,19 +21,6 @@ extern const char *out_fname;
 #define RPRT_INTERVAL 10
 #define MAX_ITER 100000
 
-// Possible advection Schemes user can choose 
-typedef enum advectionScheme {
-	UPWIND = 0,
-	CD = 1,
-	QUICK = 2,
-	SMART = 3,
-	BOUNDED_CD = 4,
-	SOU = 5
-} advectionScheme;
-
-
-extern advectionScheme ADVECTION_SCHEME;
-
 // Problem Setup
 // For a transient problem, I need:
 	// T_FINAL 
@@ -56,7 +43,7 @@ extern advectionScheme ADVECTION_SCHEME;
 // Physical constants
 //Thermal Diffusivity of aluminum at room temperature (m^2/s)
 //#define GAMMA 1
-#define GAMMA 0 //set diffusion to zero for pure advection
+//#define GAMMA 0 //set diffusion to zero for pure advection
 #define RHO 1 //Density
 
 // Source Term
@@ -66,6 +53,22 @@ extern advectionScheme ADVECTION_SCHEME;
 // Velocity Field
 #define XVEL 1.0 //x-velocity
 #define YVEL 1.0 //y-velocity
+
+// Possible advection Schemes user can choose 
+typedef enum advectionScheme {
+	UPWIND = 0,
+	CD = 1,
+	QUICK = 2,
+	SMART = 3,
+	BOUNDED_CD = 4,
+	SOU = 5
+} advectionScheme;
+
+
+extern advectionScheme ADVECTION_SCHEME;
+
+typedef double diffusionCoeff;
+extern diffusionCoeff GAMMA[NEQNS];
 
 // Boundary profiles
 double inlet_profile(const boundary* b, const face* f, double t);
