@@ -53,16 +53,16 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < NEQNS; i++)
 	{
-		phi[i] = malloc((NEQNS * NCELLS) * sizeof(double));
-		if (phi == NULL)
+		phi[i] = malloc((NCELLS) * sizeof(double));
+		if (phi[i] == NULL)
 		{
 			// Print error message to stderr stream and exit
 			fprintf(stderr, "Error: Memory allocation failed for phi[%d] array.\n",i);
 			return 1; // Exit with error code
 		}
 
-		phi_old[i] = malloc((NEQNS * NCELLS) * sizeof(double));
-		if (!phi_old)
+		phi_old[i] = malloc((NCELLS) * sizeof(double));
+		if (!phi_old[i])
 		{
 			// Print error message to stderr stream and exit
 			fprintf(stderr, "Error: Memory allocation failed for phi_old[%d] array.\n",i);
@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 
 		// Allocate gradient array (3 components for x,y,z)
 		grad[i] = malloc((3 * NCELLS) * sizeof(double));
-		if (grad == NULL)
+		if (grad[i] == NULL)
 		{
 			// Print error message to stderr stream and exit
 			fprintf(stderr, "Error: Memory allocation failed for grad[%d] array.\n",i);
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 	for (int i = 0; i < NEQNS; i++)
 	{
 		// initialize phi to 0 everywhere
-		memset(phi[i], 0, (NEQNS * NCELLS) * sizeof(double));
+		memset(phi[i], 0, (NCELLS) * sizeof(double));
 
 		// initialize grad to zero
 		memset(grad[i], 0, ((int)3 * NCELLS) * sizeof(double));
@@ -232,7 +232,7 @@ int main(int argc, char **argv)
 		for (int neqn = 0; neqn < NEQNS; neqn++)
 		{
 			// Save old phi
-			phi_old[neqn] = memcpy(phi_old[neqn], phi[neqn], (NEQNS * NCELLS) * sizeof(double));
+			phi_old[neqn] = memcpy(phi_old[neqn], phi[neqn], (NCELLS) * sizeof(double));
 
 			// Apply boundary conditions (sets phi on boundaries)
 			for (int k = 0; k < NBOUNDARIES; k++)

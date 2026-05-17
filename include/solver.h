@@ -42,7 +42,7 @@ double phi2face(double phi_owner,
 /*                       Known Scalar Operator Routines                       */
 /* -------------------------------------------------------------------------- */
 /* -------------------------- Numerical Divergence -------------------------- */
-int build_div(Mat* A, Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+int build_div(Mat* A, Vec* b, double** phi, double** grad, int eq_ids[static ND], node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
 
 /* --------------------------- Numerical Laplacian -------------------------- */
 int build_lap(Mat* A, Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
@@ -52,6 +52,8 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int
 
 //Interpolate Gradient
 int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f);
+
+int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double scal_C, double scal_F, double* rCF, double dCF);
 
 /* -------------------------------------------------------------------------- */
 

@@ -396,7 +396,13 @@ int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell
 	return 0;
 }
 
-
+/* ---------------------------- grad2face routine ---------------------------- 
+*  This routine computes the gradient at a face centroid (eg gradient vector) 
+*  based on the gradients at the owner and neighbor cell centroids. It uses 
+*  interpolation based on the normal distances to the face and a correction
+*  based on forcing the vector component along the CF vector to be equal to a
+*  finite difference phiF - phiC / dCF.
+ -------------------------------------------------------------------------- */
 int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f)
 {
 	// Average gradient weights
@@ -452,6 +458,46 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 	grad_face[0] = grad_face_avg[0] + correction_vec[0];
 	grad_face[1] = grad_face_avg[1] + correction_vec[1];
 	grad_face[2] = grad_face_avg[2] + correction_vec[2];
+	return 0;
+}
+
+// Function to interpolate a scalar known at cell centroids C and F to the intersection f'
+int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double scal_C, double scal_F, double* rCF, double dCF)
+{
+	// Compute Face interplation weight
+	double dCf[3] = {
+		f->xc - cell_C->xc,
+		f->yc - cell_C->yc,
+		f->zc - cell_C->zc
+	}; // position vector from cell C centroid to face f centroid
+
+	double dfF[3] = {
+		cell_F->xc - f->xc,
+		cell_F->yc - f->yc,
+		cell_F->zc - f->zc,
+	}; // position vector from face f centroid to cell F centroid
+
+	double S[3] = {
+		f->Sx,
+		f->Sy,
+		f->Sz
+	}; // Face area vector
+
+	double S_mag = mag(S); //face area magnitude
+
+	double ef[3] = {
+		S[0]/S_mag,
+		S[1]/S_mag,
+		S[2]/S_mag
+	}; //Face normal vector 
+
+	// Face interpolation factor based on normal distances
+	double weight_C = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
+	double weight_F = 1 - weight_C;
+
+	// Compute scalar at face f' based on interpolation
+	*scal_face = scal_C * weight_C + scal_F * weight_F;
+
 	return 0;
 }
 
@@ -1064,8 +1110,13 @@ int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS,
 /* -------------------------- Numerical Divergence -------------------------- 
 * This routine calculates the numerical divergence of a given scalar array phi
 * and adds it to the RHS b vector for that equation. The divergence array is not stored.
+* Scalar components of vectors should be contiguous in memory, so double* phi should be 
+* ordered as [phi_x for all cells, phi_y for all cells, phi_z for all cells] and indexed
+* using IDX macro. 
+* This will be called for the continuity equation's RHS b vector, but it will use the
+* guessed momentum eqation's phi values and gradients to calcate the divergence of velocity
  -------------------------------------------------------------------------- */
-int build_div(Mat* A, Vec* b, double* phi, int NCOMP, node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
 	/* Vec div_phi; 
@@ -1081,17 +1132,105 @@ int build_div(Mat* A, Vec* b, double* phi, int NCOMP, node* nodes, cell* cells, 
 	// Loop over all faces and add contributions to the b vector for owner cell C and neighbor cell F
 	for (int i = 0; i < *NFACES; i++)
 	{
+		
 		face* f = &faces[i]; //current face 
 
 		cell* C = &cells[f->owner]; //owner cell
 		cell* F = &cells[f->neighbor]; //neighbor cell
 
-		// Do not need a boundary face if statement since the values of the scalar at the boundary should be stored in phi
+		// Calculate position vectors/ Geometry stuff
+		double rCF[3] = {
+			F->xc - C->xc,
+			F->yc - C->yc,
+			F->zc - C->zc
+		}; // position vector from cell C centroid to cell F centroid
+
+		double dCF = mag(rCF); // distance between cell centroids
+
+		// Calculate rf' position vector
 		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
+		double Sf_mag = mag(Sf); // magnitude of face area vector
+		double ef[3] = {Sf[0]/Sf_mag, Sf[1]/Sf_mag, Sf[2]/Sf_mag}; // Normal vector of face
 
+		double rCf[3] = {
+			f->xc - C->xc,
+			f->yc - C->yc,
+			f->zc - C->zc
+		}; // position vector from cell C centroid to face f centroid
 
+		double g_f = dot(rCf, ef)/dot(rCF, ef); // interpolation factor for gradient at face based on normal distances
 
+		// vector to the normal intersection of the face from cell C centroid
+		double rf_prime[3] = {
+			(1 - g_f) * C->xc + g_f * F->xc,
+			(1 - g_f) * C->yc + g_f * F->yc,
+			(1 - g_f) * C->zc + g_f * F->zc
+		};
 
-	}
+		double r_f_prime_f[3] = {
+			f->xc - rf_prime[0],
+			f->yc - rf_prime[1],
+			f->zc - rf_prime[2]
+		}; // vector from face intersection to face centroid
+
+		// Do not need a boundary face if statement since the values of the scalar at the boundary should be stored in phi
+		double vec_C[3] = {0.0, 0.0, 0.0};
+		double vec_F[3] = {0.0, 0.0, 0.0};
+		double vec_f_prime[3] = {0.0, 0.0, 0.0}; 
+		double vec_f[3] = {0.0, 0.0, 0.0};
+
+		// velocity vector gradient
+		double jacobian_C[ND][3]; // jacobian for cell c, gradient of velocity vector
+		double jacobian_F[ND][3]; // jacobian for cell F, gradient of velocity vector
+		double jacobian_f_prime[ND][3]; // jacobian for face f, gradient of velocity vector
+		
+		// Assemble vectors. loop over components
+		for (int dims = 0; dims < ND; dims++)
+		{
+			vec_C[dims] = phi[eq_ids[dims]][C->id];
+			vec_F[dims] = phi[eq_ids[dims]][F->id];
+
+			// Interpolate the vector to face intersection
+			scal2face(&vec_f_prime[dims], f, C, F, vec_C[dims], vec_F[dims], rCF, dCF);
+
+			// interpolate gradient of each vector component
+			// get the gradient component (all ways 3) at the centroid
+			jacobian_C[dims][0] = grad[eq_ids[dims]][IDX(0, C->id, 3)];
+			jacobian_C[dims][1] = grad[eq_ids[dims]][IDX(1, C->id, 3)];
+			jacobian_C[dims][2] = grad[eq_ids[dims]][IDX(2, C->id, 3)];
+
+			jacobian_F[dims][0] = grad[eq_ids[dims]][IDX(0, F->id, 3)];
+			jacobian_F[dims][1] = grad[eq_ids[dims]][IDX(1, F->id, 3)];
+			jacobian_F[dims][2] = grad[eq_ids[dims]][IDX(2, F->id, 3)];
+
+			// interpolate gradients to face
+			grad2face(&jacobian_f_prime[dims], jacobian_C[dims], jacobian_F[dims], rCF, dCF, vec_C[dims], vec_F[dims], C, F, f);
+
+			// Correct face values for skewness
+			vec_f[dims] = vec_f_prime[dims] + dot(jacobian_f_prime[dims], r_f_prime_f); 
+		}
+
+		// Calculate and add RHS vector contributions
+		PetscScalar val_bC = dot(vec_f, Sf); // contribution to owner cell C
+		 PetscCall(VecSetValues(*b, 1, &C->id, &val_bC, ADD_VALUES));
+		//b[C->id] += dot(vec_f, Sf); // contribution to owner
+
+		PetscScalar val_bF = -dot(vec_f, Sf); // contribution to neighbor cell F (negative since normal vector points outward from owner cell)
+		 PetscCall(VecSetValues(*b, 1, &F->id, &val_bF, ADD_VALUES));
+		//b[F->id] += -dot(vec_f, Sf); // contribution to neighbor cell F
+	}	
+
+	return 0;
+}
+
+/* --------------------------- Numerical Laplacian -------------------------- 
+* Numerical laplacian operator. Operates on a known scalar field phi
+* and adds contributions to the RHS b vector for that equation. The laplacian
+* array is not stored. Not technically laplacian becasue it also includes a 
+* diffusion coefficient for adding to the RHS. For a pure laplacian operator,
+* the diffusion coefficient should be set to 1.0.
+ -------------------------------------------------------------------------- */
+int build_lap(Vec* b, double* phi, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+{
 
 }
