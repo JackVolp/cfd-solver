@@ -187,6 +187,11 @@ int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* c
 /* -------------------------------------------------------------------------- */
 int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
+	if (ADVECTION_SCHEME == NONE)
+	{
+		return 0; // If no advection scheme is selected, return without doing anything
+	}
+
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 
 	//Loop over all faces

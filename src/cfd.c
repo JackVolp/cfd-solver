@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 	face *faces;
 	cellEntity *cellEntities;
 
-	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS = 0, NBOUNDARIES = 0, NSOLCELLS = 0, NENTITIES = 0;
+	int NPOINTS = 0, NCELLS = 0, CELL_LIST_SIZE = 0, MAX_FACES = 0, NFACES = 0, NDEGEN_CELLS = 0, NSOLCELLS = 0, NENTITIES = 0;
 
 	/*----------Read grid from .vtk grid file----------*/
 	// Load grid from file and store in nodes and cells arrays, also calculate MAX_FACES for memory allocation of faces array
@@ -173,39 +173,18 @@ int main(int argc, char **argv)
 	// Initialize boundaries (change to allocate for more complex gemoetry)
 	// probably move this to setup somehow also
 	boundary boundaries[3]; // boundaries
-	boundaryType hw2_boundaries[3] = {Dirichlet, Neumann, Dirichlet};
 
-	// boundaryType p1_boundaries[4] = { Neumann, Robin, Neumann, Dirichlet };
-	/*boundaryData p1_boundary_data[4] = {
-		{.q_b = 0.0},
-		{.robin = {.h_inf = 100.0, .phi_inf = 25.}},
-		{.q_b = 0.0},
-		{.phi_b = 100.}
-	};*/
-
-	boundaryData hw2_boundary_data[3] = {
-		{.phi_b = (*phi0_boundary)},
-		{.q_b = (*zero_flux)},
-		{.phi_b = (*inlet_profile)}};
-
-	/*for (int i = 0; i < NBOUNDARIES; i++)
-	{
-		int endpoints[2];
-		endpoints[0] = i;
-		endpoints[1] = (i+1) % (NBOUNDARIES);
-		build_boundary(&boundaries[i], i, endpoints, p1_boundaries[i],p1_boundary_data[i], nodes, faces, &NFACES);
-	}*/
-
+	/* ------------------------ Apply Boundary Conditions ----------------------- */
 	for (int i = 0; i < NENTITIES - 1; i++)
 	{
 		if (cellEntities[i].id != 9) //make entity 9 always internal domain
 		{
 			// build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
-			build_boundary_entity(&boundaries[i], i, hw2_boundaries[i], hw2_boundary_data[i], &cellEntities[i], faces, &NFACES);
+			build_boundary_entity(&boundaries[i], i, problem_boundary_types[i], problem_boundary_data[i], &cellEntities[i], faces, &NFACES);
 		}
 	}
 
-	NBOUNDARIES = NENTITIES - 1; // In this case we are treating each entity as a boundary, except for the last one which is the interior cells. This will need to be modified for more complex geometries where not every entity is a boundary
+	//NBOUNDARIES = NENTITIES - 1; // In this case we are treating each entity as a boundary, except for the last one which is the interior cells. This will need to be modified for more complex geometries where not every entity is a boundary
 	/* -------------------------------------------------------------------------- */
 	/* Solver Loop */
 	/* -------------------------------------------------------------------------- */

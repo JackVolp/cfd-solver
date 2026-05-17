@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug cfd",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/cfd",
+      "args": ["-ksp_monitor", "-ksp_converged_reason"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        { "name": "PETSC_DIR", "value": "/home/jack0315/petsc" },
+        { "name": "PETSC_ARCH", "value": "arch-c-debug" }
+      ],
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb"
+    }
+  ]
+}

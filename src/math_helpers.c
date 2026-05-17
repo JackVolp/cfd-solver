@@ -31,3 +31,15 @@ void solve_2x2_system(double A11, double A12, double A21, double A22,
 	*x1 = (A22 * b1 - A12 * b2) / det;
 	*x2 = (A11 * b2 - A21 * b1) / det;
 }
+
+bool all_greater_than_or_eq(double* a, int size, double threshold)
+{
+	for(int i = 0; i < size; i++)
+	{
+		if(a[i] <= threshold)
+		{
+			return false;
+		}
+	}
+	return true;
+}

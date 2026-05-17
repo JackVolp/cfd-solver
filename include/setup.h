@@ -56,6 +56,7 @@ extern const char *out_fname;
 
 // Possible advection Schemes user can choose 
 typedef enum advectionScheme {
+	NONE = -1,
 	UPWIND = 0,
 	CD = 1,
 	QUICK = 2,
@@ -63,7 +64,6 @@ typedef enum advectionScheme {
 	BOUNDED_CD = 4,
 	SOU = 5
 } advectionScheme;
-
 
 extern advectionScheme ADVECTION_SCHEME;
 
@@ -74,5 +74,10 @@ extern diffusionCoeff GAMMA[NEQNS];
 double inlet_profile(const boundary* b, const face* f, double t);
 double phi0_boundary(const boundary* b, const face* f, double t);
 double zero_flux(const boundary* b, const face* f, double t);
+
+// Boundary Conditions
+#define NBOUNDARIES 3 // Number of unique boundary conditions for the problem
+extern boundaryType problem_boundary_types[NBOUNDARIES];
+extern boundaryData problem_boundary_data[NBOUNDARIES];
 
 #endif // !SETUP_H
