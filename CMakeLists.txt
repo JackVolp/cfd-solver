@@ -30,6 +30,9 @@ add_executable(cfd
     include/math_helpers.h
     include/solver.h
     include/setup.h
+    include/config.h
+    include/grid.h
+    include/cfd.h
 )
 
 target_include_directories(cfd PRIVATE

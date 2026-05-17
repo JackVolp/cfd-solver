@@ -9,7 +9,7 @@
 /*              Diffusion term matrix contribution \nabla^2 \phi              */
 /* -------------------------------------------------------------------------- */
 // this function also updates the gradient vector at the boundary /degenerate cell indicies with the gradients at the boundary faces. This should prob be in a different function
-int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCoeff GAMMA,node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCoeff GAMMA,node* nodes, cell* cells, face* faces, boundary* boundaries, int eqn, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 	
@@ -53,7 +53,7 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCo
 
 			boundary bound = boundaries[f->boundary_id];
 
-			switch (bound.type)
+			switch (bound.type[eqn]) // Check boundary condition type for this equation at this boundary
 			{
 				case Dirichlet: {
 					
@@ -80,7 +80,7 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCo
 				case Neumann: {
 					// Nothing needs to be done to coefficients for neumann as long as the source term has already been initialized prior. I.e, b has Q_c*V_c added to it already.
 
-					double q_b = bound.data.q_b(&bound, f, 0.0);
+					double q_b = bound.data[eqn].q_b(&bound, f, 0.0);
 					//double q_b = boundaries[f->boundary_id].data.q_b; // Neumann boundary condition value (flux)									
 
 					double fluxVb = q_b * Sf_mag; // Flux contribution from boundary condition, positive since we are adding it to the source term on the right hand side of the equation
@@ -91,8 +91,8 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCo
 					break;
 				}
 				case Robin: {
-					double h_inf = bound.data.robin.h_inf(&bound, f, 0.0); 
-					double phi_inf = bound.data.robin.phi_inf(&bound, f, 0.0);
+					double h_inf = bound.data[eqn].robin.h_inf(&bound, f, 0.0); 
+					double phi_inf = bound.data[eqn].robin.phi_inf(&bound, f, 0.0);
 
 					double fluxCb = (h_inf * Sf_mag * GAMMA * gDiff_b)
 						/ (h_inf * Sf_mag + GAMMA * gDiff_b); // Coefficient for phi at owner cell in Robin boundary condition eq. 8.87
@@ -164,7 +164,7 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCo
 /* -------------------------------------------------------------------------- */
 /*                   Soure term matrix contribution routine                   */
 /* -------------------------------------------------------------------------- */
-int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_source(Mat* A, Vec* b, double* phi, double* grad, int eqn, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 
@@ -172,7 +172,8 @@ int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* c
 	{
 		cell* c = &cells[i+(*NDEGEN_CELLS)];
 
-		double Q = Q_C(c->xc, c->yc, c->zc);
+		//double Q = Q_C(c->xc, c->yc, c->zc);
+		double Q = SOURCE_TERMS[eqn](c, 0.0); // Get source term value from source term function for this equation at the centroid of the cell and current time (assuming time is needed for source term)
 
 		PetscScalar val_bC = Q * c->volume;
 		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
@@ -385,7 +386,7 @@ int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double sca
 }
 
 int applyBoundary(boundary* b, cell* cells,
-	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int* NCELLS)
+	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int eqn, int* NCELLS)
 {
 	// Loop over all faces in boundary and apply boundary conditions
 	for (int i = 0; i < b->num_faces; i++)
@@ -399,11 +400,11 @@ int applyBoundary(boundary* b, cell* cells,
 
 		int phi_owner_idx = f->owner; // Index for owner cell in phi array
 
-		switch (b->type)
+		switch (b->type[eqn])
 		{
 		case Dirichlet:
 			// For Dirichlet, we can set the boundary value directly
-			phi[phi_face_idx] = b->data.phi_b(b,f,0.0); // Set phi at owner cell to boundary value
+			phi[phi_face_idx] = b->data[eqn].phi_b(b,f,0.0); // Set phi at owner cell to boundary value
 
 			break;
 		case Neumann: {
@@ -422,7 +423,7 @@ int applyBoundary(boundary* b, cell* cells,
 			double gDiff = Ef_mag / d_CF; // "Geometric Diffusion Coefficient"
 
 			// Reduces to phi_b = phi_C for q_b = 0 (zero flux/outlet condition)
-			double q_b = b->data.q_b(b, f, 0.0);
+			double q_b = b->data[eqn].q_b(b, f, 0.0);
 
 			if (GAMMA != 0.0)
 			{
@@ -440,8 +441,8 @@ int applyBoundary(boundary* b, cell* cells,
 			// For Robin, we need to calculate the equivalent boundary value based on the given phi_b, q_b, and h_infty
 			// Ignore cross diffusion term for initialization? maybe. Dont have gradient at face yet
 
-			double h_inf = b->data.robin.h_inf(b, f, 0.0);
-			double phi_inf = b->data.robin.phi_inf(b, f, 0.0);;
+			double h_inf = b->data[eqn].robin.h_inf(b, f, 0.0);
+			double phi_inf = b->data[eqn].robin.phi_inf(b, f, 0.0);;
 
 			// magnitude of surface area vector
 			double Ef[3] = { f->Ex, f->Ey, f->Ez }; // Surface area vector of face

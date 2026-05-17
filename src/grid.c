@@ -923,7 +923,7 @@ int calculate_FC_AV(face* f, cell* c_owner, cell* c_neighbor, node* nodes, int* 
 	return 0;
 }
 
-int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES)
+/* int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES)
 {
 	int initial_capacity = 10; // Initial capacity for face_ids array
 
@@ -1016,15 +1016,20 @@ int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, bound
 	//set boundary data
 	b->data = bData;
 	return 0;
-}
+} */
 
 // Replacement function for build_boundary that builds the boundary based on a cell entitiy instead of a line segment.
-int build_boundary_entity(boundary* b, int id, boundaryType type, boundaryData bData, cellEntity* entity, face* faces, int* NFACES)
+// Function needs to have a boundary condition type and boundary condition data for each equation being solved
+int build_boundary_entity(boundary* b, int id, const boundaryType type[static NEQNS], const boundaryData bData[static NEQNS], cellEntity* entity, face* faces, int* NFACES)
 {
 	b->id = id;
-	b->type = type;
-	b->data = bData;
 	b->entity_id = entity->id;
+
+	for (int neqn = 0; neqn < NEQNS; neqn++)
+	{
+		b->type[neqn] = type[neqn];
+		b->data[neqn] = bData[neqn];
+	}
 
 	int initial_capacity = 10; // Initial capacity for face_ids array
 	// initialize face ids

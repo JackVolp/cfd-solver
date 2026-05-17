@@ -8,8 +8,7 @@
 #include <stdbool.h>
 #include "mkl.h"	
 #include "math_helpers.h"
-
-
+#include "config.h"
 
 
 // Cell Types
@@ -103,9 +102,9 @@ typedef struct boundary {
 	int* face_ids; // Array of face IDs that define the surface
 	int entity_id; //id of the cell entity that boundary is attatched to
 
-	boundaryType type; // Boundary condition type (Dirichlet, Neumann, Robin)
+	boundaryType type[NEQNS]; // Boundary condition type (Dirichlet, Neumann, Robin)
 	// The conditional information if from ai, i havent read about how unions/ shared memory stuff works
-	boundaryData data; // Union to hold boundary condition data (e.g., value for Dirichlet, flux for Neumann, coefficients for Robin)
+	boundaryData data[NEQNS]; // Union to hold boundary condition data (e.g., value for Dirichlet, flux for Neumann, coefficients for Robin)
 	void* bc_params; //optional parameters related to the boundaryData function
 } boundary;
 
@@ -140,7 +139,7 @@ int build_face(cell* c, face* faces, node* nodes, cell* cells, int k, int* fidx)
 
 int build_boundary(boundary* b, int id, int* endpoints, boundaryType type, boundaryData bData, node* nodes, face* faces, int* NFACES);
 
-int build_boundary_entity(boundary* b, int id, boundaryType type, boundaryData bData, cellEntity* entity, face* faces, int* NFACES);
+int build_boundary_entity(boundary* b, int id, const boundaryType type[static NEQNS], const boundaryData bData[static NEQNS], cellEntity* entity, face* faces, int* NFACES);
 
 int build_faces_and_cells(node* nodes,
 	cell* cells,

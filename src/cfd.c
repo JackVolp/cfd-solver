@@ -172,7 +172,7 @@ int main(int argc, char **argv)
 	/*-------- Create and apply boundary conditions--------*/
 	// Initialize boundaries (change to allocate for more complex gemoetry)
 	// probably move this to setup somehow also
-	boundary boundaries[3]; // boundaries
+	boundary boundaries[NBOUNDARIES]; // boundaries
 
 	/* ------------------------ Apply Boundary Conditions ----------------------- */
 	for (int i = 0; i < NENTITIES - 1; i++)
@@ -180,6 +180,7 @@ int main(int argc, char **argv)
 		if (cellEntities[i].id != 9) //make entity 9 always internal domain
 		{
 			// build_boundary_entity(&boundaries[i], i, p1_boundaries[i], p1_boundary_data[i], nodes, faces, cells, &NFACES);
+			// Each booundary entity is passed data for every equation
 			build_boundary_entity(&boundaries[i], i, problem_boundary_types[i], problem_boundary_data[i], &cellEntities[i], faces, &NFACES);
 		}
 	}
@@ -195,7 +196,7 @@ int main(int argc, char **argv)
 	{
 		for (int j = 0; j < NBOUNDARIES; j++)
 		{
-			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], GAMMA[i], &NCELLS);
+			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], GAMMA[i], i, &NCELLS);
 
 			if (err != 0)
 			{
@@ -216,7 +217,7 @@ int main(int argc, char **argv)
 			// Apply boundary conditions (sets phi on boundaries)
 			for (int k = 0; k < NBOUNDARIES; k++)
 			{
-				err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], GAMMA[neqn], &NCELLS);
+				err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], GAMMA[neqn], neqn, &NCELLS);
 
 				if (err != 0)
 				{
@@ -241,14 +242,14 @@ int main(int argc, char **argv)
 			/* memset(A, 0, (NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double));
 			memset(b, 0, ((NEQNS * NSOLCELLS) * sizeof(double))); */
 
-			err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+			err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
 			if (err != 0)
 			{
 				fprintf(stderr, "build_diffusion failed with error code %d\n", err);
 				return 1;
 			}
 
-			err = build_source(&A[neqn], &b[neqn], phi[neqn], grad[neqn], nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+			err = build_source(&A[neqn], &b[neqn], phi[neqn], grad[neqn],neqn, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 			if (err != 0)
 			{
 				fprintf(stderr, "build_source failed with error code %d\n", err);

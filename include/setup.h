@@ -3,6 +3,7 @@
 #define SETUP_H
 
 #include <stdbool.h>
+#include "config.h"
 #include "grid.h"
 //#include "solver.h"
 
@@ -35,9 +36,7 @@ extern const char *out_fname;
 #define DT 0.5 // time step size, only used when transient is true but explicit is false (inplicit stepping tstep size)
 #define T_FINAL 7.5 // Final time for transient simulation only used when transient
 #define SAVE_INTERVAL 0.5 // Time interval for saving output files, only used when transient
-#define ND 2 // number of dimensions for vector quantities 
 
-#define NEQNS 1 // Number of transport equations solved
 
 
 // Physical constants
@@ -48,7 +47,7 @@ extern const char *out_fname;
 
 // Source Term
 //#define Q_C(x,y,z) (10.*x + 5.)
-#define Q_C(x,y,z) (0)
+//#define Q_C(x,y,z) (0)
 
 // Velocity Field
 #define XVEL 1.0 //x-velocity
@@ -77,7 +76,12 @@ double zero_flux(const boundary* b, const face* f, double t);
 
 // Boundary Conditions
 #define NBOUNDARIES 3 // Number of unique boundary conditions for the problem
-extern boundaryType problem_boundary_types[NBOUNDARIES];
-extern boundaryData problem_boundary_data[NBOUNDARIES];
+extern boundaryType problem_boundary_types[NBOUNDARIES][NEQNS];
+extern boundaryData problem_boundary_data[NBOUNDARIES][NEQNS];
+
+/* ------------------------- Source Term Definition ------------------------- */
+// Source term function type definition
+typedef double (*SOURCE_TERM_FCN)(const cell* C, const double t); 
+extern SOURCE_TERM_FCN SOURCE_TERMS[NEQNS]; // Array of source term functions for each equation
 
 #endif // !SETUP_H

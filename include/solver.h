@@ -21,7 +21,10 @@
 /* Diffusion Routines */
 /* -------------------------------------------------------------------------- */
 //int build_diffusion(double* A, double* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
-int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCoeff GAMMA,node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, 
+	const diffusionCoeff GAMMA,node* nodes, cell* cells, 
+	face* faces, boundary* boundaries, int eqn, int* NCELLS,
+	 int* NDEGEN_CELLS, int* NFACES);
 /* -------------------------------------------------------------------------- */
 /* Advection Routines */
 /* -------------------------------------------------------------------------- */
@@ -58,7 +61,9 @@ int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double sca
 /* -------------------------------------------------------------------------- */
 /*                             Source Term routine                            */
 /* -------------------------------------------------------------------------- */
-int build_source(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES);
+int build_source(Mat* A, Vec* b, double* phi, double* grad, int eqn, node* nodes,
+	 cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS,
+	  int* NFACES);
 
 /* -------------------------------------------------------------------------- */
 /* Transient Routines */
@@ -94,7 +99,7 @@ for neumann, only q_b used
 for robin phi_b and h_infty used
 */
 int applyBoundary(boundary* b, cell* cells,
-	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int* NCELLS);
+	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int eqn, int* NCELLS);
 
 
 
