@@ -458,10 +458,10 @@ int applyBoundary(boundary* b, cell* cells,
 				else
 				{
 					p[phi_face_idx] = p[phi_owner_idx]; // Set pressure at face to pressure at owner cell for zero flux Neumann condition on pressure in SIMPLE
+					/* double grad_p_face[3] = { grad_p[IDX(0, phi_face_idx, 3)], grad_p[IDX(1, phi_face_idx, 3)], grad_p[IDX(2, phi_face_idx, 3)] };
 
-					grad_p[IDX(0, phi_face_idx, 3)] = 0.0; // presssure gradient should be same as pressure correction gradient
-					grad_p[IDX(1, phi_face_idx, 3)] = 0.0;
-					grad_p[IDX(2, phi_face_idx, 3)] = 0.0;
+					p[phi_face_idx] = p[phi_owner_idx] + dot(grad_p_face, rCF); // Set pressure at face to pressure at owner cell for zero flux Neumann condition on pressure in SIMPLE */
+
 				}
 			}
 #endif //SIMPLE

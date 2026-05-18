@@ -50,7 +50,7 @@ int main(int argc, char **argv)
 	}
 
 	double alpha = epsilon;
-	GAMMA[2] = epsilon + alpha;
+	GAMMA[PCORR] = epsilon + alpha;
 	
 	/*----------Allocate Arrays----------*/
 	// Allocate conservative scalars
@@ -442,6 +442,41 @@ int main(int argc, char **argv)
 			PetscCall(VecAssemblyBegin(b[neqn]));
 			PetscCall(VecAssemblyEnd(b[neqn]));
 
+			if (neqn == PCORR)
+			{
+				PetscInt ref_row = 0; // Index of the row to set as reference for pressure correction (can be any cell index, but typically a boundary cell is chosen)
+				PetscScalar ref_value = 2.0; // Reference value for pressure correction
+
+				// Set the diagonal coefficient of the reference row to 1 to specify its value
+				// and make pressure unique
+				PetscCall(MatZeroRows(A[neqn], 1, &ref_row, 1.0, NULL, NULL));
+
+				PetscCall(VecSetValue(b[neqn], ref_row, ref_value, INSERT_VALUES));
+				PetscCall(VecAssemblyBegin(b[neqn]));
+				PetscCall(VecAssemblyEnd(b[neqn]));
+
+				// Re-finalize matrix assembly
+				PetscCall(MatAssemblyBegin(A[neqn], MAT_FINAL_ASSEMBLY));
+				PetscCall(MatAssemblyEnd(A[neqn], MAT_FINAL_ASSEMBLY));
+			}
+
+			
+
+			// Set nullspace
+			/* MatNullSpace pcorr_nullspace = NULL;
+			if (neqn == PCORR)
+			{
+				PetscCall(MatNullSpaceCreate(PETSC_COMM_WORLD,
+					PETSC_TRUE,
+					0,
+					NULL,
+					&pcorr_nullspace));
+					
+					PetscCall(MatSetNullSpace(A[neqn], pcorr_nullspace));
+
+					PetscCall(MatNullSpaceRemove(pcorr_nullspace, b[neqn]));
+			} */
+
 			// Solve system
 			PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp[neqn]));
 			PetscCall(KSPSetOperators(ksp[neqn], A[neqn], A[neqn]));
@@ -459,6 +494,11 @@ int main(int argc, char **argv)
 
 			PetscCall(KSPSolve(ksp[neqn], b[neqn], xp[neqn])); // solve
 
+			/* if (pcorr_nullspace)
+			{
+				PetscCall(MatNullSpaceDestroy(&pcorr_nullspace));
+			} */
+
 			// copy solution back to phi
 			const PetscScalar *xarray;
 			PetscCall(VecGetArrayRead(xp[neqn], &xarray)); // get pointer to values inside xp vector
@@ -469,6 +509,7 @@ int main(int argc, char **argv)
 			}
 
 			PetscCall(VecRestoreArrayRead(xp[neqn], &xarray)); // close access to the values
+			PetscCall(KSPDestroy(&ksp[neqn]));
 
 		/* -------------------------------------------------------------------------- */
 
@@ -484,21 +525,31 @@ int main(int argc, char **argv)
 		// Update solution fields with correction if SIMPLE
 #if SIMPLE
 
+		// Recalculate grad[PCORR]
+		/* err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, phi[PCORR], grad[PCORR]);
+		if (err != 0)
+		{
+			fprintf(stderr, "compute_lsq_gradient failed for phi_k with error code %d\n", err);
+			return 1;
+		}
+ */
 		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
 		{
 			p[cell_i] += phi[PCORR][cell_i]; // update pressure by adding pressure correction
-			phi[XMOM][cell_i] += -epsilon*grad_p[cell_i * 3]; // update u by subtracting pressure gradient in x direction
-			phi[YMOM][cell_i] += -epsilon*grad_p[cell_i * 3 + 1]; // update v by subtracting pressure gradient in y direction
+
+			phi[XMOM][cell_i] += -epsilon*grad[PCORR][cell_i * 3]; // update u by subtracting pressure gradient in x direction
+			phi[YMOM][cell_i] += -epsilon*grad[PCORR][cell_i * 3 + 1]; // update v by subtracting pressure gradient in y direction
 		}
 
+
 		// Enforce unique pressure, sets pref = 2.0, corner cell
-		int p_ref_idx = NDEGEN_CELLS;
+		/* int p_ref_idx = NDEGEN_CELLS;
 		double p_ref = p[p_ref_idx];
 
 		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
 		{
 			p[cell_i] -= (p_ref - 2.0);
-		}
+		} */
 
 #endif //SIMPLE
 		// Stopping conditions
@@ -606,7 +657,7 @@ int main(int argc, char **argv)
 		free(phi_old[neqn]);
 
 		// Clean up PETSc objects
-		PetscCall(KSPDestroy(&ksp[neqn]));
+		//PetscCall(KSPDestroy(&ksp[neqn]));
 		PetscCall(VecDestroy(&xp[neqn]));
 		PetscCall(VecDestroy(&b[neqn]));
 		PetscCall(MatDestroy(&A[neqn]));
