@@ -1175,3 +1175,46 @@ int build_lap(Vec* b, double* phi, double* grad, double coeff, node* nodes, cell
 	}
 	return 0;
 }
+
+/* ---------- Calculate Brezzi Pitkana stabilization factor epsilon --------- */
+int calc_epsilon(cell *cells,
+                 int *NCELLS,
+                 int *NDEGEN_CELLS,
+                 double *epsilon)
+{
+    double h_sum = 0.0;
+    int n_valid = 0;
+
+    for (int i = *NDEGEN_CELLS; i < *NCELLS; i++)
+    {
+        cell *C = &cells[i];
+
+        if (C->volume <= 0.0)
+        {
+            continue;
+        }
+
+#if ND == 2
+        double h_C = sqrt(C->volume);
+#elif ND == 3
+        double h_C = cbrt(C->volume);
+#else
+        double h_C = pow(C->volume, 1.0 / ((double)ND));
+#endif
+
+        h_sum += h_C;
+        n_valid++;
+    }
+
+    if (n_valid == 0)
+    {
+        fprintf(stderr, "Error: calc_epsilon found no valid solution-cell volumes.\n");
+        return 1;
+    }
+
+    double h_avg = h_sum / ((double)n_valid);
+
+    *epsilon = C_EPSILON * h_avg * h_avg;
+
+    return 0;
+}

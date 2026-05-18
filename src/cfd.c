@@ -40,6 +40,18 @@ int main(int argc, char **argv)
 	// Calculate Cell Centroid, Volume, Face information, and other geometric properties
 	err = build_faces_and_cells(nodes, cells, &NCELLS, &MAX_FACES, &NFACES, &faces);
 
+	// Calculate grid dependent coefficient for pressure correction equation stabilization
+	double epsilon;
+	err = calc_epsilon(cells, &NCELLS, &NDEGEN_CELLS, &epsilon);
+	if (err != 0)
+	{
+		fprintf(stderr, "calc_epsilon failed with error code %d\n", err);
+		return 1;
+	}
+
+	double alpha = epsilon;
+	GAMMA[2] = epsilon + alpha;
+	
 	/*----------Allocate Arrays----------*/
 	// Allocate conservative scalars
 	double* phi[NEQNS];
