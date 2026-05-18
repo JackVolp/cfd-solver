@@ -18,7 +18,7 @@ extern const char *out_fname;
 /* -------------------------------------------------------------------------- */
 
 // Solver parameters
-#define STOP_COND 1e-15
+#define STOP_COND 1e-6
 #define RPRT_INTERVAL 10
 #define MAX_ITER 100000
 #define C_EPSILON 0.5 // stabilization constant for Brezzi Pitkaranta stabilization O(1)

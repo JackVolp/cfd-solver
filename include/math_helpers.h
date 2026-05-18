@@ -20,4 +20,6 @@ void solve_2x2_system(double A11,
 
 bool all_greater_than_or_eq(double* a, int size, double threshold);
 
+double arr_max(double* a, int size);
+
 #endif // !MATH_HELPERS_H

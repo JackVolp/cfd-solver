@@ -297,7 +297,9 @@ int main(int argc, char **argv)
 
 			if (neqn == XMOM || neqn == YMOM)
 			{		
-				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
+
+				// Pass -GAMMA becasue build diffusion assumes form of the heat equation
+				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], -GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
 				if (err != 0)
 				{
 					fprintf(stderr, "build_diffusion failed with error code %d\n", err);
@@ -320,8 +322,9 @@ int main(int argc, char **argv)
 			}
 			else if (neqn == PCORR)
 			{
-				// lhs diffusion of phi_k
-				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				// lhs diffusion of phi_k. Use negative diffusion coefficient because build_diffusion assumes form of the heat equation with -gamma*laplacian(phi) but 
+				// pressure correction eqn is gamma*lap(phi)
+				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], -GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
 				if (err != 0)
 				{
 					fprintf(stderr, "build_diffusion failed with error code %d\n", err);
@@ -339,7 +342,7 @@ int main(int argc, char **argv)
 				}
 
 				// rhs epsilon * laplacian of p (stabilization term)
-				err = build_lap(&b[neqn], p, grad_p, GAMMA[neqn]/2.0, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				err = build_lap(&b[neqn], p, grad_p, -GAMMA[neqn]/2.0, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 				if (err != 0)
 				{
 					fprintf(stderr, "build_lap failed with error code %d\n", err);
@@ -480,12 +483,23 @@ int main(int argc, char **argv)
 		
 		// Update solution fields with correction if SIMPLE
 #if SIMPLE
+
 		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
 		{
 			p[cell_i] += phi[PCORR][cell_i]; // update pressure by adding pressure correction
 			phi[XMOM][cell_i] += -epsilon*grad_p[cell_i * 3]; // update u by subtracting pressure gradient in x direction
 			phi[YMOM][cell_i] += -epsilon*grad_p[cell_i * 3 + 1]; // update v by subtracting pressure gradient in y direction
 		}
+
+		// Enforce unique pressure, sets pref = 2.0, corner cell
+		int p_ref_idx = NDEGEN_CELLS;
+		double p_ref = p[p_ref_idx];
+
+		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
+		{
+			p[cell_i] -= (p_ref - 2.0);
+		}
+
 #endif //SIMPLE
 		// Stopping conditions
 #if TRANSIENT
@@ -546,7 +560,8 @@ int main(int argc, char **argv)
 			}
 		}
 		
-		if (all_greater_than_or_eq(residual, NEQNS, STOP_COND))
+		// if biggest residual is less than stopping condition, stop calculation and print residuals
+		if (arr_max(residual, NEQNS) < STOP_COND)
 		{
 			printf("STOP_COND HIT after %d iterations\n", i + 1);
 			for (int neqn = 0; neqn < NEQNS; neqn++)

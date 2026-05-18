@@ -140,8 +140,8 @@ double fy(const cell* C, const double t)
 	double y = C->yc;
 
 	double term1 = 2*pi*sin(2*pi*y);
-	double term2 = GAMMA[0]*(4*pi*pi*pi*sin(2*pi*x)*sin(pi*y)*sin(pi*y) 
-		- 2*pi*pi*pi*sin(2*pi*x)*cos(2*pi*y));
+	double term2 = GAMMA[1]*(4.*pi*pi*pi*sin(2.*pi*x)*sin(pi*y)*sin(pi*y) 
+		- 2.*pi*pi*pi*sin(2.*pi*x)*cos(2.*pi*y));
 	
 	return term1 + term2;
 }
@@ -155,9 +155,9 @@ double g(const cell* C, const double t)
 	double x = C->xc;
 	double y = C->yc;
 
-	double epsilon = GAMMA[0]/2.0; // remove alpha contribution from diffusion coefficient
+	double epsilon = GAMMA[PCORR]/2.0; // remove alpha contribution from diffusion coefficient
 	
-	return 4 * epsilon * pi * pi * (cos(2 * pi * x) + cos(2 * pi * y));
+	return -4.0 * epsilon * pi * pi * (cos(2. * pi * x) + cos(2. * pi * y));
 }
 
 //SOURCE_TERM_FCN SOURCE_TERMS[NEQNS] = {zero_source}; // Array of source term functions for each equation, initialized to zero source for all equations

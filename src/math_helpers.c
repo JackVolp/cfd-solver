@@ -43,3 +43,16 @@ bool all_greater_than_or_eq(double* a, int size, double threshold)
 	}
 	return true;
 }
+
+double arr_max(double* a, int size)
+{
+	double max_val = a[0];
+	for(int i = 1; i < size; i++)
+	{
+		if(a[i] > max_val)
+		{
+			max_val = a[i];
+		}
+	}
+	return max_val;
+}
