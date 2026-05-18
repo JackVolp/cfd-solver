@@ -164,7 +164,7 @@ int build_diffusion(Mat* A, Vec* b, double* phi, double* grad, const diffusionCo
 /* -------------------------------------------------------------------------- */
 /*                   Soure term matrix contribution routine                   */
 /* -------------------------------------------------------------------------- */
-int build_source(Mat* A, Vec* b, double* phi, double* grad, int eqn, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
+int build_source(Vec* b, double* phi, double* grad, int eqn, node* nodes, cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS, int* NFACES)
 {
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of cells included in solution (non-degenerate cells)
 
@@ -386,7 +386,8 @@ int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double sca
 }
 
 int applyBoundary(boundary* b, cell* cells,
-	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int eqn, int* NCELLS)
+	face* faces, double* phi, double* grad, double* p, double* grad_p,
+	const diffusionCoeff GAMMA, int eqn, int* NCELLS)
 {
 	// Loop over all faces in boundary and apply boundary conditions
 	for (int i = 0; i < b->num_faces; i++)
@@ -397,14 +398,25 @@ int applyBoundary(boundary* b, cell* cells,
 
 		// Should always be a boundary face but just to be sure
 		int phi_face_idx = f->neighbor; // If boundary face, use owner cell for phi index, otherwise use neighbor cell (should not trigger for internal faces)
-
 		int phi_owner_idx = f->owner; // Index for owner cell in phi array
+
+		#if SIMPLE
+    		bool apply_pressure_too = (eqn == PCORR && p != NULL);
+		#endif
 
 		switch (b->type[eqn])
 		{
 		case Dirichlet:
 			// For Dirichlet, we can set the boundary value directly
 			phi[phi_face_idx] = b->data[eqn].phi_b(b,f,0.0); // Set phi at owner cell to boundary value
+
+#if SIMPLE
+			if (apply_pressure_too)
+			{
+				fprintf(stderr, "Applying Dirichlet condition to pressure not yet supported %d\n", b->id);
+				return 1;
+			}
+#endif
 
 			break;
 		case Neumann: {
@@ -435,6 +447,22 @@ int applyBoundary(boundary* b, cell* cells,
 				phi[phi_face_idx] = phi[phi_owner_idx];
 			}
 			
+#if SIMPLE
+			if (apply_pressure_too)
+			{
+				if (q_b != 0.0)
+				{
+					fprintf(stderr, "Applying Neumann condition with nonzero flux to pressure not yet supported %d\n", b->id);
+					return 1;
+				}
+				else
+				{
+					p[phi_face_idx] = p[phi_owner_idx]; // Set pressure at face to pressure at owner cell for zero flux Neumann condition on pressure in SIMPLE
+
+					grad_p[IDX(0, phi_face_idx, 3)] = q_b; // presssure gradient should be same as pressure correction gradient
+				}
+			}
+#endif //SIMPLE
 			break;
 		}
 		case Robin: {
@@ -470,6 +498,14 @@ int applyBoundary(boundary* b, cell* cells,
 			phi[phi_face_idx] = (h_inf * Sf_mag * phi_inf
 				+ GAMMA * gDiff * phi[phi_owner_idx]
 				- GAMMA * grad_dot_Tf) / (h_inf * Sf_mag + GAMMA * gDiff);
+
+#if SIMPLE
+			if (apply_pressure_too)
+			{
+				fprintf(stderr, "Applying Robin condition to pressure not yet supported %d\n", b->id);
+				return 1;
+			}
+#endif // SIMPLE
 			break;
 		}
 		default:
@@ -1100,12 +1136,15 @@ int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* 
 		int F_sol_idx = F->id - *NDEGEN_CELLS; // index of cell F in solution arrays, adjust for degenerate cells
 
 		PetscScalar val_bC = dot(vec_f, Sf); // contribution to owner cell C
-		 PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
+		PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
 		//b[C->id] += dot(vec_f, Sf); // contribution to owner
 
+		if (!f->boundary_face)
+		{
 		PetscScalar val_bF = -dot(vec_f, Sf); // contribution to neighbor cell F (negative since normal vector points outward from owner cell)
 		 PetscCall(VecSetValues(*b, 1, &F_sol_idx, &val_bF, ADD_VALUES));
 		//b[F->id] += -dot(vec_f, Sf); // contribution to neighbor cell F
+		}
 	}	
 
 	return 0;
@@ -1169,7 +1208,11 @@ int build_lap(Vec* b, double* phi, double* grad, double coeff, node* nodes, cell
 		int C_sol_idx = C->id - *NDEGEN_CELLS; 
 		int F_sol_idx = F->id - *NDEGEN_CELLS; 
 		PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
+
+		if (!f->boundary_face)
+		{
 		PetscCall(VecSetValues(*b, 1, &F_sol_idx, &val_bF, ADD_VALUES));
+		}
 		 //b[C->id] += coeff * dot(grad_f, Sf); // contribution to owner cell C
 		 //b[F->id] += -coeff * dot(grad_f, Sf); // contribution to neighbor cell F
 	}
@@ -1217,4 +1260,21 @@ int calc_epsilon(cell *cells,
     *epsilon = C_EPSILON * h_avg * h_avg;
 
     return 0;
+}
+
+/* -------------------- Numerical Gradient Build Routine -------------------- 
+ * Adds COMP of gradient to the RHS vector b for each cell. Uses gradient at cell centers
+-------------------------------------------------------------------------- */
+int build_gradient(Vec* b, double* grad, int COMP, cell* cells, int* NCELLS, int* NDEGEN_CELLS)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+
+		PetscScalar val_bC = grad[IDX(C->id, COMP, 3)]*C->volume; // contribution to source term for cell C, multiply by cell volume to convert from gradient to flux divergence
+		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
+		//b[i] += grad[IDX(C->id, COMP, 3)]; // Add contribution to source term for cell C
+	}
+	return 0;
 }

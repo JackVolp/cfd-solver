@@ -104,6 +104,27 @@ int main(int argc, char **argv)
 		PetscCall(VecSetFromOptions(b[i]));
 		PetscCall(VecDuplicate(b[i], &xp[i])); // Create solution vector xp with same size as bp
 	}
+
+	#if SIMPLE
+		double* p = malloc((NCELLS) * sizeof(double)); // pressure array
+		if (p == NULL)
+		{
+			// Print error message to stderr stream and exit
+			fprintf(stderr, "Error: Memory allocation failed for pressure array.\n");
+			return 1; // Exit with error code
+		}
+
+		double* grad_p = malloc((3 * NCELLS) * sizeof(double)); // pressure gradient array
+		if (grad_p == NULL)
+		{
+			// Print error message to stderr stream and exit
+			fprintf(stderr, "Error: Memory allocation failed for pressure gradient array.\n");
+			return 1; // Exit with error code
+		}
+		memset(p, 0, (NCELLS) * sizeof(double)); // Initialize pressure array to zero
+		memset(grad_p, 0, (3 * NCELLS) * sizeof(double)); // Initialize pressure gradient array to zero
+	#endif
+
 	/* double *phi = malloc((NEQNS * NCELLS) * sizeof(double));
 	if (phi == NULL)
 	{
@@ -208,8 +229,12 @@ int main(int argc, char **argv)
 	{
 		for (int j = 0; j < NBOUNDARIES; j++)
 		{
-			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], GAMMA[i], i, &NCELLS);
-
+#if SIMPLE
+			// For SIMPLE, need to pass pressure and pressure gradient to applyBoundary for use in momentum equation boundary conditions
+			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], p, grad_p, GAMMA[i], i, &NCELLS);
+#else
+			err = applyBoundary(&boundaries[j], cells, faces, phi[i], grad[i], NULL, NULL, GAMMA[i], i, &NCELLS);
+#endif // SIMPLE
 			if (err != 0)
 			{
 				fprintf(stderr, "initBoundary failed with error code %d\n", err);
@@ -221,6 +246,16 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < MAX_ITER; i++)
 	{
+#if SIMPLE
+		// Calculate pressure gradient
+		err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, p, grad_p);
+		if(err != 0)
+		{
+			fprintf(stderr, "compute_lsq_gradient failed with error code %d for pressure gradient\n", err);
+			return 1;
+		}
+#endif //SIMPLE
+
 		for (int neqn = 0; neqn < NEQNS; neqn++)
 		{
 			// Save old phi
@@ -229,8 +264,13 @@ int main(int argc, char **argv)
 			// Apply boundary conditions (sets phi on boundaries)
 			for (int k = 0; k < NBOUNDARIES; k++)
 			{
-				err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], GAMMA[neqn], neqn, &NCELLS);
-
+				#if SIMPLE
+					// For SIMPLE, need to pass pressure and pressure gradient to applyBoundary for use in
+					// momentum equation boundary conditions
+					 err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], p, grad_p, GAMMA[neqn], neqn, &NCELLS);
+				#else
+					err = applyBoundary(&boundaries[k], cells, faces, phi[neqn], grad[neqn], NULL, NULL, GAMMA[neqn], neqn, &NCELLS);
+				#endif // SIMPLE
 				if (err != 0)
 				{
 					fprintf(stderr, "initBoundary failed with error code %d\n", err);
@@ -246,6 +286,7 @@ int main(int argc, char **argv)
 				return 1;
 			}
 
+
 			// Build Matrix and Source term
 			// initialize matrix coefficients and source term vector to zero
 			PetscCall(MatZeroEntries(A[neqn]));
@@ -254,7 +295,71 @@ int main(int argc, char **argv)
 			/* memset(A, 0, (NEQNS * NSOLCELLS * NSOLCELLS) * sizeof(double));
 			memset(b, 0, ((NEQNS * NSOLCELLS) * sizeof(double))); */
 
-			err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
+			if (neqn == XMOM || neqn == YMOM)
+			{		
+				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_diffusion failed with error code %d\n", err);
+					return 1;
+				}
+
+				err = build_source(&b[neqn], phi[neqn], grad[neqn], neqn, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_source failed with error code %d\n", err);
+					return 1;
+				}
+
+				err = build_gradient(&b[neqn], grad_p, neqn, cells, &NCELLS, &NDEGEN_CELLS);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_gradient failed with error code %d\n", err);
+					return 1;
+				}
+			}
+			else if (neqn == PCORR)
+			{
+				// lhs diffusion of phi_k
+				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_diffusion failed with error code %d\n", err);
+					return 1;
+				}
+
+				// rhs div u*
+				int eq_ids[ND] = {XMOM, YMOM}; // For divergence, need to pass the velocity equation IDs to build_div to get the correct velocity components
+				err = build_div(&b[neqn], phi, grad, eq_ids, nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				//err = build_div(&b[neqn], phi, grad, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_divergence failed with error code %d\n", err);
+					return 1;
+				}
+
+				// rhs epsilon * laplacian of p (stabilization term)
+				err = build_lap(&b[neqn], p, grad_p, GAMMA[neqn]/2.0, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_lap failed with error code %d\n", err);
+					return 1;
+				}
+
+				// g source term
+				err = build_source(&b[neqn], phi[neqn], grad[neqn], neqn, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				if (err != 0)
+				{
+					fprintf(stderr, "build_source failed with error code %d\n", err);
+					return 1;
+				}
+			}
+			else
+			{
+				fprintf(stderr, "Error: Unknown equation index %d\n", neqn);
+				return 1;
+			}
+			/* err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
 			if (err != 0)
 			{
 				fprintf(stderr, "build_diffusion failed with error code %d\n", err);
@@ -273,7 +378,7 @@ int main(int argc, char **argv)
 			{
 				fprintf(stderr, "build_advection failed wiht error code %d\n", err);
 				return 1;
-			}
+			} */
 
 #if TRANSIENT
 
@@ -329,41 +434,6 @@ int main(int argc, char **argv)
 			} */
 
 			/* ---------------------------------- PETSc --------------------------------- */
-
-			/* Mat Ap;		// petsc matrix
-			Vec bp, xp; // petsc vectors
-			KSP ksp;	// solver object
-			PC pc;		// preconditioner object
-
-			// Create PETSc matrix and vectors, and KSP solver context here, and solve the linear system using PETSc. This will require converting the matrix A and vector b into the appropriate PETSc formats (e.g., sparse format for A). You can use the PETSc functions MatSetValues and VecSetValues to populate the matrix and vector, and then call KSPSolve to solve the system. Remember to destroy the PETSc objects after use to free memory.
-			// matrix A
-			PetscCall(MatCreate(PETSC_COMM_WORLD, &Ap));
-			PetscCall(MatSetSizes(Ap, PETSC_DECIDE, PETSC_DECIDE, NSOLCELLS, NSOLCELLS));
-			PetscCall(MatSetFromOptions(Ap));
-			PetscCall(MatSetUp(Ap));
-			// vector b
-			PetscCall(VecCreate(PETSC_COMM_WORLD, &bp));
-			PetscCall(VecSetSizes(bp, PETSC_DECIDE, NSOLCELLS));
-			PetscCall(VecSetFromOptions(bp));
-			PetscCall(VecDuplicate(bp, &xp)); // Create solution vector xp with same size as bp
-	*/
-
-			// Copy dense matrix into petsc matrix
-			/* for (int row = 0; row < NSOLCELLS; row++)
-			{
-				PetscCall(VecSetValue(b, row, b[row], INSERT_VALUES));
-
-				for (int col = 0; col < NSOLCELLS; col++)
-				{
-					double value = A[row + col * NSOLCELLS]; // LAPACK_COL_MAJOR layout 
-
-					if (fabs(value) > 0.0)
-					{
-						PetscCall(MatSetValue(Ap, row, col, value, INSERT_VALUES));
-					}
-				}
-			} */
-
 			PetscCall(MatAssemblyBegin(A[neqn], MAT_FINAL_ASSEMBLY));
 			PetscCall(MatAssemblyEnd(A[neqn], MAT_FINAL_ASSEMBLY));
 			PetscCall(VecAssemblyBegin(b[neqn]));
@@ -408,7 +478,15 @@ int main(int argc, char **argv)
 
 		}
 		
-
+		// Update solution fields with correction if SIMPLE
+#if SIMPLE
+		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
+		{
+			p[cell_i] += phi[PCORR][cell_i]; // update pressure by adding pressure correction
+			phi[XMOM][cell_i] += -epsilon*grad_p[cell_i * 3]; // update u by subtracting pressure gradient in x direction
+			phi[YMOM][cell_i] += -epsilon*grad_p[cell_i * 3 + 1]; // update v by subtracting pressure gradient in y direction
+		}
+#endif //SIMPLE
 		// Stopping conditions
 #if TRANSIENT
 
@@ -458,13 +536,13 @@ int main(int argc, char **argv)
 		bool stop_calc = false;
 		bool continue_calc = true;
 
-		for (int neqn = 0; neqns < NEQNS; neqns++)
+		for (int neqn = 0; neqn < NEQNS; neqn++)
 		{
-			err = calc_Residual(&A, &b, phi, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual);
+			err = calc_Residual(&A[neqn], &b[neqn], phi[neqn], cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual[neqn]);
 			if (i % RPRT_INTERVAL == 0)
 			{
 				printf("ITER = %d \n", i + 1);
-				printf("Residual = %g \n", residual);
+				printf("Residual = %g \n", residual[neqn]);
 			}
 		}
 		
@@ -478,19 +556,26 @@ int main(int argc, char **argv)
 			break;
 		}
 		
-#endif // TRANSIENT
+
 	}
 
 	//---------------------------------------------------
 
 	// ------ Write output file --------"output_file.vtk"
-	err = write_vtk_output(out_fname, &nodes, &cells, &NPOINTS, &NCELLS,
+#if SIMPLE
+	// If using SIMPLE, include pressure and pressure gradient in output for post-processing and visualization purposes
+	err = write_vtk_output(out_fname, nodes, cells, &NPOINTS, &NCELLS,
+								   &CELL_LIST_SIZE, phi, grad, p, grad_p);
+#else
+	err = write_vtk_output(out_fname, nodes, cells, &NPOINTS, &NCELLS,
 						   &CELL_LIST_SIZE, phi, grad);
+#endif //SIMPLE
 	if (err != 0)
 	{
 		fprintf(stderr, "write_vtk_output failed with error code %d\n", err);
 		return 1;
 	}
+#endif // TRANSIENT
 
 	// Release Allocated Memory for grid
 	free_grid(nodes, cells, faces, NCELLS, NFACES);
@@ -512,6 +597,10 @@ int main(int argc, char **argv)
 		PetscCall(MatDestroy(&A[neqn]));
 	}
 	
+#if SIMPLE
+	free(p);
+	free(grad_p);
+#endif
 
 	PetscCall(PetscFinalize());
 	printf("To C or not to C: that is the question. \n");
@@ -521,9 +610,11 @@ int main(int argc, char **argv)
 
 /*---------------------------------------------------------------------------
 * Write data function and grid
+* Pass p = NULL and grad_p = NULL if not using SIMPLE
 ----------------------------------------------------------------------------*/
-int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
-					 int *NPOINTS, int *NCELLS, int *CELL_LIST_SIZE, double **phi, double **grad)
+int write_vtk_output(const char *out_filename, const node *nodes, const cell *cells,
+					 const int *NPOINTS, const int *NCELLS, const int *CELL_LIST_SIZE,
+					 double **phi, double **grad, const double *p, const double *grad_p)
 {
 	// Open file for writing
 	FILE *fp = fopen(out_filename, "w");
@@ -547,25 +638,25 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	for (int i = 0; i < *NPOINTS; i++)
 	{
 		fprintf(fp, "%.15f %.15f %.15f\n",
-				(*nodes)[i].x, (*nodes)[i].y, (*nodes)[i].z);
+				nodes[i].x, nodes[i].y, nodes[i].z);
 	}
 
 	// Write cells
 	fprintf(fp, "CELLS %d %d\n", *NCELLS, *CELL_LIST_SIZE);
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		int num_nodes = (*cells)[i].num_nodes;
+		int num_nodes = cells[i].num_nodes;
 		fprintf(fp, "%d ", num_nodes);
 
 		for (int point = 0; point < num_nodes; point++)
 		{
 			if (point == num_nodes - 1)
 			{
-				fprintf(fp, "%d\n", (*cells)[i].node_ids[point]);
+				fprintf(fp, "%d\n", cells[i].node_ids[point]);
 			}
 			else
 			{
-				fprintf(fp, "%d ", (*cells)[i].node_ids[point]);
+				fprintf(fp, "%d ", cells[i].node_ids[point]);
 			}
 		}
 	}
@@ -574,7 +665,7 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	fprintf(fp, "CELL_TYPES %d\n", *NCELLS);
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		fprintf(fp, "%d\n", (*cells)[i].type);
+		fprintf(fp, "%d\n", cells[i].type);
 	}
 
 	// Write cell data for ALL cells, including degenerate cells
@@ -585,7 +676,7 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	fprintf(fp, "LOOKUP_TABLE default\n");
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		fprintf(fp, "%d\n", (*cells)[i].id);
+		fprintf(fp, "%d\n", cells[i].id);
 	}
 
 	// Cell Entity Ids
@@ -593,7 +684,7 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	fprintf(fp, "LOOKUP_TABLE default\n");
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		fprintf(fp, "%d\n", (*cells)[i].entity_id);
+		fprintf(fp, "%d\n", cells[i].entity_id);
 	}
 
 	// Phi
@@ -614,7 +705,32 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	fprintf(fp, "LOOKUP_TABLE default\n");
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		fprintf(fp, "%.15f\n", (*cells)[i].volume);
+		fprintf(fp, "%.15f\n", cells[i].volume);
+	}
+
+	// Pressure (if SIMPLE)
+	if (p != NULL)
+	{
+		fprintf(fp, "SCALARS pressure double 1\n");
+		fprintf(fp, "LOOKUP_TABLE default\n");
+		for (int i = 0; i < *NCELLS; i++)
+		{
+			fprintf(fp, "%.15f\n", p[i]);
+		}
+	}
+
+	// Pressure gradient
+	if (grad_p != NULL)
+	{
+		// Pressure gradient vector
+		fprintf(fp, "VECTORS grad_pressure double\n");
+		for (int i = 0; i < *NCELLS; i++)
+		{
+			fprintf(fp, "%.15f %.15f %.15f\n",
+					grad_p[i * 3],
+					grad_p[i * 3 + 1],
+					grad_p[i * 3 + 2]);
+		}
 	}
 
 	// Gradient vector
@@ -636,7 +752,7 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	fprintf(fp, "LOOKUP_TABLE default\n");
 	for (int i = 0; i < *NCELLS; i++)
 	{
-		fprintf(fp, "%d\n", ((*cells)[i].volume <= 0.0) ? 1 : 0);
+		fprintf(fp, "%d\n", (cells[i].volume <= 0.0) ? 1 : 0);
 	}
 
 	// Point data
@@ -645,7 +761,7 @@ int write_vtk_output(const char *out_filename, node **nodes, cell **cells,
 	fprintf(fp, "LOOKUP_TABLE default\n");
 	for (int i = 0; i < *NPOINTS; i++)
 	{
-		fprintf(fp, "%d\n", (*nodes)[i].id);
+		fprintf(fp, "%d\n", nodes[i].id);
 	}
 
 	fclose(fp);

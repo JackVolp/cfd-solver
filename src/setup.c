@@ -58,18 +58,26 @@ boundaryType problem_boundary_types[NBOUNDARIES][NEQNS] = {
 }; // problem_boundary_types[0] = &problem_boundary_types */
 
 boundaryData problem_boundary_data[NBOUNDARIES][NEQNS] = {
-	{
-		{.phi_b = (*no_slip_wall), .phi_b = (*no_slip_wall), .q_b = (*zero_flux)} // List of boundary 0 data for all equations
-	},
-	{
-		{.phi_b = (*no_slip_wall), .phi_b = (*no_slip_wall), .q_b = (*zero_flux)} // List of boundary 1 data for all equations
-	},
-	{
-		{.phi_b = (*no_slip_wall), .phi_b = (*no_slip_wall), .q_b = (*zero_flux)} //List of boundary 2 data for all equations
-	},
-	{
-		{.phi_b = (*no_slip_wall), .phi_b = (*no_slip_wall), .q_b = (*zero_flux)} //List of boundary 3 data for all equations
-	}
+    {
+        {.phi_b = no_slip_wall},  // boundary 0, equation 0
+        {.phi_b = no_slip_wall},  // boundary 0, equation 1
+        {.q_b   = zero_flux}      // boundary 0, equation 2
+    },
+    {
+        {.phi_b = no_slip_wall},  // boundary 1, equation 0
+        {.phi_b = no_slip_wall},  // boundary 1, equation 1
+        {.q_b   = zero_flux}      // boundary 1, equation 2
+    },
+    {
+        {.phi_b = no_slip_wall},  // boundary 2, equation 0
+        {.phi_b = no_slip_wall},  // boundary 2, equation 1
+        {.q_b   = zero_flux}      // boundary 2, equation 2
+    },
+    {
+        {.phi_b = no_slip_wall},  // boundary 3, equation 0
+        {.phi_b = no_slip_wall},  // boundary 3, equation 1
+        {.q_b   = zero_flux}      // boundary 3, equation 2
+    }
 };
 
 /* boundaryData problem_boundary_data[NBOUNDARIES][NEQNS] = { 
@@ -149,7 +157,7 @@ double g(const cell* C, const double t)
 
 	double epsilon = GAMMA[0]/2.0; // remove alpha contribution from diffusion coefficient
 	
-	return 4*epsilon*pi*pi*cos(2*pi*x)*cos(2*pi*y);
+	return 4 * epsilon * pi * pi * (cos(2 * pi * x) + cos(2 * pi * y));
 }
 
 //SOURCE_TERM_FCN SOURCE_TERMS[NEQNS] = {zero_source}; // Array of source term functions for each equation, initialized to zero source for all equations

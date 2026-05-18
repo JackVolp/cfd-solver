@@ -51,6 +51,8 @@ int build_lap(Vec* b, double* phi, double* grad, double coeff, node* nodes, cell
 /* --------------------------- Numerical Gradient --------------------------- */
 int compute_lsq_gradient(node* nodes, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* phi, double* grad);
 
+int build_gradient(Vec* b, double* grad, int COMP, cell* cells, int* NCELLS, int* NDEGEN_CELLS);
+
 //Interpolate Gradient
 int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, double dCF, double phi_C, double phi_F, cell* cell_C, cell* cell_F, face* f);
 
@@ -61,9 +63,10 @@ int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double sca
 /* -------------------------------------------------------------------------- */
 /*                             Source Term routine                            */
 /* -------------------------------------------------------------------------- */
-int build_source(Mat* A, Vec* b, double* phi, double* grad, int eqn, node* nodes,
-	 cell* cells, face* faces, boundary* boundaries, int* NCELLS, int* NDEGEN_CELLS,
-	  int* NFACES);
+int build_source(Vec* b, double* phi, double* grad, int eqn, node* nodes,
+	 cell* cells, face* faces, boundary* boundaries, int* NCELLS,
+	  int* NDEGEN_CELLS, int* NFACES);
+
 
 /* -------------------------------------------------------------------------- */
 /* Transient Routines */
@@ -99,8 +102,14 @@ for neumann, only q_b used
 for robin phi_b and h_infty used
 */
 int applyBoundary(boundary* b, cell* cells,
-	face* faces, double* phi, double* grad, const diffusionCoeff GAMMA, int eqn, int* NCELLS);
+	face* faces, double* phi, double* grad, double* p, double* grad_p,
+	const diffusionCoeff GAMMA, int eqn, int* NCELLS);
 
+// Caluclate brezzi pitkaranta stabilization term for pressure correction equation
+int calc_epsilon(cell *cells,
+                 int *NCELLS,
+                 int *NDEGEN_CELLS,
+                 double *epsilon);
 
 
 #endif // !SOLVER_H
