@@ -1274,7 +1274,7 @@ int build_gradient(Vec* b, double* grad, int COMP, cell* cells, int* NCELLS, int
 	{
 		cell* C = &cells[i + (*NDEGEN_CELLS)];
 
-		PetscScalar val_bC = grad[IDX(C->id, COMP, 3)]*C->volume; // contribution to source term for cell C, multiply by cell volume to convert from gradient to flux divergence
+		PetscScalar val_bC = grad[IDX(COMP, C->id, 3)]*C->volume; // contribution to source term for cell C, multiply by cell volume to convert from gradient to flux divergence
 		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
 		//b[i] += grad[IDX(C->id, COMP, 3)]; // Add contribution to source term for cell C
 	}

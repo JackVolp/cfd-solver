@@ -246,16 +246,6 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < MAX_ITER; i++)
 	{
-#if SIMPLE
-		// Calculate pressure gradient
-		err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, p, grad_p);
-		if(err != 0)
-		{
-			fprintf(stderr, "compute_lsq_gradient failed with error code %d for pressure gradient\n", err);
-			return 1;
-		}
-#endif //SIMPLE
-
 		for (int neqn = 0; neqn < NEQNS; neqn++)
 		{
 			// Save old phi
@@ -277,6 +267,40 @@ int main(int argc, char **argv)
 					return 1;
 				}
 			}
+#if SIMPLE
+			if (neqn == XMOM)
+			{
+				// Compute on x  momentum eqn since it wont change for the y momentum
+				// For SIMPLE, need to compute pressure gradient before building momentum equation matrix and source term
+				
+				// update pressure on boundaries before building momentum equation matrix and source term because pressure gradient is part of the source term for the momentum equation in SIMPLE
+				for (int k = 0; k < NBOUNDARIES; k++)
+				{
+					err = applyBoundary(&boundaries[k],
+										cells,
+										faces,
+										phi[PCORR],
+										grad[PCORR],
+										p,
+										grad_p,
+										GAMMA[PCORR],
+										PCORR,
+										&NCELLS);
+					if (err != 0)
+					{
+						fprintf(stderr, "pressure boundary update failed with error code %d\n", err);
+						return 1;
+					}
+				}
+				
+				err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, p, grad_p);
+				if (err != 0)
+				{
+					fprintf(stderr, "compute_lsq_gradient failed with error code %d for pressure gradient\n", err);
+					return 1;
+				}
+			}
+#endif //SIMPLE
 
 			// Compute Gradient at cell centers and at boundary faces
 			err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, phi[neqn], grad[neqn]);
@@ -445,7 +469,7 @@ int main(int argc, char **argv)
 			if (neqn == PCORR)
 			{
 				PetscInt ref_row = 0; // Index of the row to set as reference for pressure correction (can be any cell index, but typically a boundary cell is chosen)
-				PetscScalar ref_value = 2.0; // Reference value for pressure correction
+				PetscScalar ref_value = 0.0; // Reference value for pressure correction
 
 				// Set the diagonal coefficient of the reference row to 1 to specify its value
 				// and make pressure unique
@@ -525,32 +549,45 @@ int main(int argc, char **argv)
 		// Update solution fields with correction if SIMPLE
 #if SIMPLE
 
-		// Recalculate grad[PCORR]
-		/* err = compute_lsq_gradient(nodes, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, phi[PCORR], grad[PCORR]);
+		/*
+		* Refresh phi_k boundary values after solving PCORR.
+		* For homogeneous Neumann, this should set phi_k_boundary = phi_k_owner.
+		*/
+		for (int k = 0; k < NBOUNDARIES; k++)
+		{
+			err = applyBoundary(&boundaries[k],
+								cells,
+								faces,
+								phi[PCORR],
+								grad[PCORR],
+								p,
+								grad_p,
+								GAMMA[PCORR],
+								PCORR,
+								&NCELLS);
+			if (err != 0)
+			{
+				fprintf(stderr, "applyBoundary failed for phi_k with error code %d\n", err);
+				return 1;
+			}
+		}
+
+		err = compute_lsq_gradient(nodes, cells, faces,
+								&NCELLS, &NDEGEN_CELLS, &NFACES,
+								phi[PCORR], grad[PCORR]);
 		if (err != 0)
 		{
 			fprintf(stderr, "compute_lsq_gradient failed for phi_k with error code %d\n", err);
 			return 1;
 		}
- */
+
 		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
 		{
-			p[cell_i] += phi[PCORR][cell_i]; // update pressure by adding pressure correction
+			p[cell_i] += phi[PCORR][cell_i];
 
-			phi[XMOM][cell_i] += -epsilon*grad[PCORR][cell_i * 3]; // update u by subtracting pressure gradient in x direction
-			phi[YMOM][cell_i] += -epsilon*grad[PCORR][cell_i * 3 + 1]; // update v by subtracting pressure gradient in y direction
+			phi[XMOM][cell_i] += -alpha * grad[PCORR][IDX(0, cell_i, 3)];
+			phi[YMOM][cell_i] += -alpha * grad[PCORR][IDX(1, cell_i, 3)];
 		}
-
-
-		// Enforce unique pressure, sets pref = 2.0, corner cell
-		/* int p_ref_idx = NDEGEN_CELLS;
-		double p_ref = p[p_ref_idx];
-
-		for (int cell_i = NDEGEN_CELLS; cell_i < NCELLS; cell_i++)
-		{
-			p[cell_i] -= (p_ref - 2.0);
-		} */
-
 #endif //SIMPLE
 		// Stopping conditions
 #if TRANSIENT
