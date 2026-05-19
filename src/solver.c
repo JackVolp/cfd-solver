@@ -270,7 +270,7 @@ int build_advection(Mat* A, Vec* b, double* phi, double* grad, node* nodes, cell
 			PetscScalar val_bF = mdot_f * (phi_f_HO - phi_f_U);
 
 			PetscCall(VecSetValues(*b, 1, &Csol_idx, &val_bC, ADD_VALUES));
-			PetscCall(VecSetValues(*b, 1, &Csol_idx, &val_bF, ADD_VALUES));
+			PetscCall(VecSetValues(*b, 1, &Fsol_idx, &val_bF, ADD_VALUES));
 
 /* 			b[Csol_idx] += -mdot_f * (phi_f_HO - phi_f_U);
 			b[Fsol_idx] += mdot_f * (phi_f_HO - phi_f_U); */
@@ -293,38 +293,49 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 	//double weight_C = 1. / fmax(cell_C->volume,1.e-10); // floor to prevent divide by zero
 	//double weight_F = 1. / fmax(cell_F->volume,1.e-10);
 	//double denom = weight_C + weight_F;
-	
+
 	// Compute Face interplation weight
-	double dCf[3] = {
-		f->xc - cell_C->xc,
-		f->yc - cell_C->yc,
-		f->zc - cell_C->zc
-	}; // position vector from cell C centroid to face f centroid
+	double weight_C;
+	double weight_F;
 
-	double dfF[3] = {
-		cell_F->xc - f->xc,
-		cell_F->yc - f->yc,
-		cell_F->zc - f->zc,
-	}; // position vector from face f centroid to cell F centroid
+	if (f->boundary_face)
+	{
+		weight_F = 0.0; // For boundary faces, only use owner cell gradient
+		weight_C = 1.0;
+	}
+	else
+	{
+		double dCf[3] = {
+			f->xc - cell_C->xc,
+			f->yc - cell_C->yc,
+			f->zc - cell_C->zc
+			}; // position vector from cell C centroid to face f centroid
 
-	double S[3] = {
-		f->Sx,
-		f->Sy,
-		f->Sz
-	}; // Face area vector
+		double dfF[3] = {
+			cell_F->xc - f->xc,
+			cell_F->yc - f->yc,
+			cell_F->zc - f->zc,
+			}; // position vector from face f centroid to cell F centroid
 
-	double S_mag = mag(S); //face area magnitude
+		double S[3] = {
+			f->Sx,
+			f->Sy,
+			f->Sz
+			}; // Face area vector
 
-	double ef[3] = {
-		S[0]/S_mag,
-		S[1]/S_mag,
-		S[2]/S_mag
-	}; //Face normal vector 
+		double S_mag = mag(S); //face area magnitude
 
-	// Face interpolation factor based on normal distances
-	double weight_C = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
-	double weight_F = 1 - weight_C;
+		double ef[3] = {
+			S[0]/S_mag,
+			S[1]/S_mag,
+			S[2]/S_mag
+			}; //Face normal vector 
 
+		// Face interpolation factor based on normal distances
+		double weight_F = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
+		double weight_C = 1 - weight_F;
+	}
+	
 	// Compute average gradient at face
 	double grad_face_avg[3] = {
 		(grad_C[0]*weight_C + grad_F[0]*weight_F),
@@ -348,6 +359,12 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 // Function to interpolate a scalar known at cell centroids C and F to the intersection f'
 int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double scal_C, double scal_F, double* rCF, double dCF)
 {
+	if (f->boundary_face)
+	{
+		*scal_face = scal_F; // For boundary faces, use specified boundary value
+		return 0;
+	}
+
 	// Compute Face interplation weight
 	double dCf[3] = {
 		f->xc - cell_C->xc,
@@ -376,8 +393,8 @@ int scal2face(double* scal_face, face* f, cell* cell_C, cell* cell_F, double sca
 	}; //Face normal vector 
 
 	// Face interpolation factor based on normal distances
-	double weight_C = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
-	double weight_F = 1 - weight_C;
+	double weight_F = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
+	double weight_C = 1 - weight_F;
 
 	// Compute scalar at face f' based on interpolation
 	*scal_face = scal_C * weight_C + scal_F * weight_F;
@@ -650,9 +667,9 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 int calc_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual)
 {
 	// Residual of equation Ax=b, should go to zero as solution converges. Can be used to check for convergence and also for debugging to make sure residual is decreasing after each iteration. Note that this is not the same as epsilon which is the maximum % change in phi values between iterations, but they should be correlated.
-	double residual = 0.0;
+	//double residual = 0.0;
 
-	double scaling_factor = 0.0; //scale residual globally
+	//double scaling_factor = 0.0; //scale residual globally
 
 	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS); // Number of solution cells (non-boundary/degenerate cells)
 	
@@ -693,7 +710,8 @@ int calc_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NC
 	PetscCall(MatGetDiagonal(*A, diagA));
 
 	// Multiply diagonal of A with phi
-	PetscCall(VecAXPY(diagA, 1.0, phi_vec));
+	PetscCall(VecPointwiseMult(diagA, diagA, phi_vec));
+	//PetscCall(VecAXPY(diagA, 1.0, phi_vec));
 
 	// Sum absolute values to get scaling factor
 	PetscScalar scaling_sum;
@@ -738,6 +756,9 @@ int calc_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NC
 
 	*scaled_residual = res_sum / fmax(scaling_sum, 1e-10); // Scale residual to prevent issues with very small or large values
 
+	PetscCall(VecDestroy(&phi_vec));
+	PetscCall(VecDestroy(&residual_vec));
+	PetscCall(VecDestroy(&diagA));
 	return 0;
 }
 
@@ -1061,7 +1082,31 @@ int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* 
 		cell* C = &cells[f->owner]; //owner cell
 		cell* F = &cells[f->neighbor]; //neighbor cell
 
+		// Calculate rf' position vector
+		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
+		double Sf_mag = mag(Sf); // magnitude of face area vector
+
+		// Handle boundary faces
+		if (f->boundary_face)
+		{
+			double vec_f[3] = {0.0, 0.0, 0.0};
+
+			for (int dims = 0; dims < ND; dims++)
+			{
+				// Boundary value already imposed by applyBoundary().
+				vec_f[dims] = phi[eq_ids[dims]][F->id];
+			}
+
+			int C_sol_idx = C->id - *NDEGEN_CELLS;
+			PetscScalar val_bC = dot(vec_f, Sf);
+
+			PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
+			continue;
+		}
+
 		// Calculate position vectors/ Geometry stuff
+		double ef[3] = {Sf[0]/Sf_mag, Sf[1]/Sf_mag, Sf[2]/Sf_mag}; // Normal vector of face
+
 		double rCF[3] = {
 			F->xc - C->xc,
 			F->yc - C->yc,
@@ -1069,11 +1114,6 @@ int build_div(Vec* b, double** phi, double** grad, int eq_ids[static ND], node* 
 		}; // position vector from cell C centroid to cell F centroid
 
 		double dCF = mag(rCF); // distance between cell centroids
-
-		// Calculate rf' position vector
-		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
-		double Sf_mag = mag(Sf); // magnitude of face area vector
-		double ef[3] = {Sf[0]/Sf_mag, Sf[1]/Sf_mag, Sf[2]/Sf_mag}; // Normal vector of face
 
 		double rCf[3] = {
 			f->xc - C->xc,

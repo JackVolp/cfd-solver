@@ -20,7 +20,7 @@ extern const char *out_fname;
 // Solver parameters
 #define STOP_COND 1e-15
 #define RPRT_INTERVAL 10
-#define MAX_ITER 5
+#define MAX_ITER 1
 #define C_EPSILON 0.5 // stabilization constant for Brezzi Pitkaranta stabilization O(1)
 // Problem Setup
 // For a transient problem, I need:
