@@ -49,6 +49,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	//double alpha = ALPHA; // velocity urf
 	double alpha = epsilon;
 	GAMMA[PCORR] = epsilon + alpha;
 	
@@ -272,7 +273,7 @@ int main(int argc, char **argv)
 			{
 				// Compute on x  momentum eqn since it wont change for the y momentum
 				// For SIMPLE, need to compute pressure gradient before building momentum equation matrix and source term
-				
+
 				// update pressure on boundaries before building momentum equation matrix and source term because pressure gradient is part of the source term for the momentum equation in SIMPLE
 				for (int k = 0; k < NBOUNDARIES; k++)
 				{
@@ -346,6 +347,15 @@ int main(int argc, char **argv)
 			}
 			else if (neqn == PCORR)
 			{
+				// Recompute Velocity gradient for pressure correction source term since it changes after momentum equation update in SIMPLE
+				err = compute_lsq_gradient(nodes, cells, faces,
+                               &NCELLS, &NDEGEN_CELLS, &NFACES,
+                               phi[XMOM], grad[XMOM]);
+
+    			err = compute_lsq_gradient(nodes, cells, faces,
+                               &NCELLS, &NDEGEN_CELLS, &NFACES,
+                               phi[YMOM], grad[YMOM]);
+
 				// lhs diffusion of phi_k. Use negative diffusion coefficient because build_diffusion assumes form of the heat equation with -gamma*laplacian(phi) but 
 				// pressure correction eqn is gamma*lap(phi)
 				err = build_diffusion(&A[neqn], &b[neqn], phi[neqn], grad[neqn], -GAMMA[neqn], nodes, cells, faces, boundaries, neqn, &NCELLS, &NDEGEN_CELLS, &NFACES);
@@ -366,7 +376,7 @@ int main(int argc, char **argv)
 				}
 
 				// rhs epsilon * laplacian of p (stabilization term)
-				err = build_lap(&b[neqn], p, grad_p, -GAMMA[neqn]/2.0, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
+				err = build_lap(&b[neqn], p, grad_p, -epsilon, nodes, cells, faces, boundaries, &NCELLS, &NDEGEN_CELLS, &NFACES);
 				if (err != 0)
 				{
 					fprintf(stderr, "build_lap failed with error code %d\n", err);
@@ -587,6 +597,16 @@ int main(int argc, char **argv)
 
 			phi[XMOM][cell_i] += -alpha * grad[PCORR][IDX(0, cell_i, 3)];
 			phi[YMOM][cell_i] += -alpha * grad[PCORR][IDX(1, cell_i, 3)];
+		}
+
+		// Reset pressure correction
+		for (int cell_i = 0; cell_i < NCELLS; cell_i++)
+		{
+			phi[PCORR][cell_i] = 0.0;
+
+			grad[PCORR][IDX(0, cell_i, 3)] = 0.0;
+			grad[PCORR][IDX(1, cell_i, 3)] = 0.0;
+			grad[PCORR][IDX(2, cell_i, 3)] = 0.0;
 		}
 #endif //SIMPLE
 		// Stopping conditions

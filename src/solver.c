@@ -332,8 +332,8 @@ int grad2face(double* grad_face, double* grad_C, double* grad_F, double* rCF, do
 			}; //Face normal vector 
 
 		// Face interpolation factor based on normal distances
-		double weight_F = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
-		double weight_C = 1 - weight_F;
+		weight_F = dot(dCf, ef) / (dot(dCf, ef) + dot(dfF, ef));
+		weight_C = 1 - weight_F;
 	}
 	
 	// Compute average gradient at face
@@ -1267,40 +1267,20 @@ int calc_epsilon(cell *cells,
                  int *NDEGEN_CELLS,
                  double *epsilon)
 {
-    double h_sum = 0.0;
-    int n_valid = 0;
+	double V_sum = 0.0;
+	//double h;
 
-    for (int i = *NDEGEN_CELLS; i < *NCELLS; i++)
-    {
-        cell *C = &cells[i];
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+		V_sum += C->volume;
+	}
 
-        if (C->volume <= 0.0)
-        {
-            continue;
-        }
+	double h = pow(V_sum / NSOLCELLS, 1./ND);
 
-#if ND == 2
-        double h_C = sqrt(C->volume);
-#elif ND == 3
-        double h_C = cbrt(C->volume);
-#else
-        double h_C = pow(C->volume, 1.0 / ((double)ND));
-#endif
-
-        h_sum += h_C;
-        n_valid++;
-    }
-
-    if (n_valid == 0)
-    {
-        fprintf(stderr, "Error: calc_epsilon found no valid solution-cell volumes.\n");
-        return 1;
-    }
-
-    double h_avg = h_sum / ((double)n_valid);
-
-    *epsilon = C_EPSILON * h_avg * h_avg;
-
+	*epsilon = C_EPSILON * h * h;
+	
     return 0;
 }
 

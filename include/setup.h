@@ -20,8 +20,9 @@ extern const char *out_fname;
 // Solver parameters
 #define STOP_COND 1e-15
 #define RPRT_INTERVAL 10
-#define MAX_ITER 1
-#define C_EPSILON 0.5 // stabilization constant for Brezzi Pitkaranta stabilization O(1)
+#define MAX_ITER 20
+#define C_EPSILON 100 // stabilization constant for Brezzi Pitkaranta stabilization O(1)
+#define ALPHA 0.8
 // Problem Setup
 // For a transient problem, I need:
 	// T_FINAL 
@@ -53,6 +54,9 @@ extern const char *out_fname;
 #define XMOM 0
 #define YMOM 1
 #define PCORR 2
+
+/* --------------- Specified Pressure for all Neumann problem --------------- */
+// Cell id of specified pressure
 
 // Possible advection Schemes user can choose 
 typedef enum advectionScheme {
