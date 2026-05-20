@@ -50,7 +50,8 @@ int main(int argc, char **argv)
 	}
 
 	//double alpha = ALPHA; // velocity urf
-	double alpha = epsilon;
+	EPSILON_G = epsilon;
+	double alpha = ALPHA;
 	GAMMA[PCORR] = epsilon + alpha;
 	
 	/*----------Allocate Arrays----------*/
@@ -122,8 +123,15 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Error: Memory allocation failed for pressure gradient array.\n");
 			return 1; // Exit with error code
 		}
-		memset(p, 0, (NCELLS) * sizeof(double)); // Initialize pressure array to zero
+		//memset(p, 0, (NCELLS) * sizeof(double)); // Initialize pressure array to zero
+		for (int i = 0; i < NCELLS; i++)
+		{
+			p[i] = 2.0;
+		}
+
 		memset(grad_p, 0, (3 * NCELLS) * sizeof(double)); // Initialize pressure gradient array to zero
+
+		
 	#endif
 
 	/* double *phi = malloc((NEQNS * NCELLS) * sizeof(double));
@@ -654,20 +662,67 @@ int main(int argc, char **argv)
 			break;
 #else
 		// Residual/linear system based stopping condition.
+		// update boundaries and gradients before calculating residuals
+		for (int k = 0; k < NBOUNDARIES; k++)
+		{
+			applyBoundary(&boundaries[k], cells, faces,
+						phi[XMOM], grad[XMOM],
+						p, grad_p,
+						GAMMA[XMOM], XMOM, &NCELLS);
+
+			applyBoundary(&boundaries[k], cells, faces,
+						phi[YMOM], grad[YMOM],
+						p, grad_p,
+						GAMMA[YMOM], YMOM, &NCELLS);
+
+			applyBoundary(&boundaries[k], cells, faces,
+						phi[PCORR], grad[PCORR],
+						p, grad_p,
+						GAMMA[PCORR], PCORR, &NCELLS);
+		}
+
+		compute_lsq_gradient(nodes, cells, faces,
+							&NCELLS, &NDEGEN_CELLS, &NFACES,
+							phi[XMOM], grad[XMOM]);
+
+		compute_lsq_gradient(nodes, cells, faces,
+							&NCELLS, &NDEGEN_CELLS, &NFACES,
+							phi[YMOM], grad[YMOM]);
+
+		compute_lsq_gradient(nodes, cells, faces,
+							&NCELLS, &NDEGEN_CELLS, &NFACES,
+							p, grad_p);
+
 		double residual[NEQNS];
 		bool stop_calc = false;
 		bool continue_calc = true;
 
+		/* for (int neqn = 0; neqn < NEQNS; neqn++)
+		{
+			err = calc_l2_norm(&A[neqn], &b[neqn], phi[neqn], NCELLS, NDEGEN_CELLS, &residual[neqn]);
+			//err = calc_Residual(&A[neqn], &b[neqn], phi[neqn], cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual[neqn]);
+			if (i % RPRT_INTERVAL == 0)
+			{
+				printf("ITER = %d \n", i + 1);
+				printf("Residual = %g \n", residual[neqn]);
+			}
+		} */
+		// Calculate residuals for each eqn
+		int eq_ids[ND] = {XMOM, YMOM}; // For divergence, need to pass the velocity equation IDs to build_div to get the correct velocity components
+
+		err = mom_l2_residual(phi[XMOM], grad[XMOM], XMOM, p, grad_p, GAMMA[XMOM], cells, faces, NCELLS, NDEGEN_CELLS, NFACES, &residual[XMOM]);
+		err = mom_l2_residual(phi[YMOM], grad[YMOM], YMOM, p, grad_p, GAMMA[YMOM], cells, faces, NCELLS, NDEGEN_CELLS, NFACES, &residual[YMOM]);
+		err = continuity_l2_residual(phi, grad, p, grad_p, eq_ids, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, epsilon, &residual[PCORR]);
+
 		for (int neqn = 0; neqn < NEQNS; neqn++)
 		{
-			err = calc_Residual(&A[neqn], &b[neqn], phi[neqn], cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, &residual[neqn]);
 			if (i % RPRT_INTERVAL == 0)
 			{
 				printf("ITER = %d \n", i + 1);
 				printf("Residual = %g \n", residual[neqn]);
 			}
 		}
-		
+
 		// if biggest residual is less than stopping condition, stop calculation and print residuals
 		if (arr_max(residual, NEQNS) < STOP_COND)
 		{

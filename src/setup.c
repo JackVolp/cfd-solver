@@ -5,11 +5,11 @@
 /*                                     I/O                                    */
 /* -------------------------------------------------------------------------- */
 /* -------------------------- Grid input file name -------------------------- */
-const char *filename = "input/hw3_64x64.vtk";
+const char *filename = "input/hw3_128x128.vtk";
 //const char *filename = "input/full_unstruct.vtk";
 
 /* ---------------------------- Output file name ---------------------------- */
-const char *out_fname = "output/hw3_64x64_out.vtk";	
+const char *out_fname = "output/hw3_128x128_out.vtk";	
 //const char *out_fname = "output/full_unstruct_implicit_SMART_out.vtk";
 
 /* -------------------------------------------------------------------------- */
@@ -147,6 +147,7 @@ double fy(const cell* C, const double t)
 }
 
 // continuity eqn source term. Since alpha = epsilon, epsilon = (alpha + epsilon) / 2
+double EPSILON_G = 0.0;
 double g(const cell* C, const double t)
 {
 	(void)t;
@@ -155,9 +156,9 @@ double g(const cell* C, const double t)
 	double x = C->xc;
 	double y = C->yc;
 
-	double epsilon = GAMMA[PCORR]/2.0; // remove alpha contribution from diffusion coefficient
+	//double epsilon = GAMMA[PCORR]/2.0; // remove alpha contribution from diffusion coefficient
 	
-	return -4.0 * epsilon * pi * pi * (cos(2. * pi * x) + cos(2. * pi * y));
+	return -4.0 * EPSILON_G * pi * pi * (cos(2. * pi * x) + cos(2. * pi * y));
 }
 
 //SOURCE_TERM_FCN SOURCE_TERMS[NEQNS] = {zero_source}; // Array of source term functions for each equation, initialized to zero source for all equations

@@ -18,11 +18,11 @@ extern const char *out_fname;
 /* -------------------------------------------------------------------------- */
 
 // Solver parameters
-#define STOP_COND 1e-15
+#define STOP_COND 1e-7
 #define RPRT_INTERVAL 10
-#define MAX_ITER 20
-#define C_EPSILON 100 // stabilization constant for Brezzi Pitkaranta stabilization O(1)
-#define ALPHA 0.8
+#define MAX_ITER 3000
+#define C_EPSILON  1// stabilization constant for Brezzi Pitkaranta stabilization O(1)
+#define ALPHA 0.025
 // Problem Setup
 // For a transient problem, I need:
 	// T_FINAL 
@@ -92,6 +92,7 @@ extern SOURCE_TERM_FCN SOURCE_TERMS[NEQNS]; // Array of source term functions fo
 double zero_source(const cell* C, const double t);
 double fx(const cell* C, const double t);
 double fy(const cell* C, const double t);
+extern double EPSILON_G;
 double g(const cell* C, const double t);
 
 #endif // !SETUP_H

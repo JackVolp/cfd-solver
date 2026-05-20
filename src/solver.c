@@ -664,7 +664,44 @@ double phi2face(double phi_owner, double phi_neighbor, double mdot_f,
 	return phi_f;
 }
 
-int calc_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual)
+int calc_l2_norm(Mat* A, Vec* b, double* phi, int NCELLS, int NDEGEN_CELLS, double* norm)
+{
+	int NSOLCELLS = (NCELLS) - (NDEGEN_CELLS); // Number of solution cells (non-boundary/degenerate cells)
+	
+	Vec phi_vec;
+	Vec residual_vec;
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &phi_vec));
+	PetscCall(VecSetSizes(phi_vec, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(phi_vec));
+	PetscCall(VecDuplicate(phi_vec, &residual_vec)); // Create vector fore residual
+	
+	// Set values of phi vector
+	PetscScalar *phi_array; 
+	PetscCall(VecGetArray(phi_vec, &phi_array)); //set phi_vec to point to phi_array
+
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		phi_array[i] = phi[i + NDEGEN_CELLS];
+	}
+
+	PetscCall(VecRestoreArray(phi_vec, &phi_array));
+
+	// Compute A*phi and store in residual_vec
+	PetscCall(MatMult(*A, phi_vec, residual_vec));
+	// Subtract b from residual_vec to get A*phi - b
+	PetscCall(VecAXPY(residual_vec, -1.0, *b));
+	PetscCall(VecAbs(residual_vec)); // Take absolute value of residual vector
+	
+	// take l2 norm of residual
+	PetscScalar l2_norm;
+	PetscCall(VecNorm(residual_vec, NORM_2, &l2_norm));
+
+	*norm = (double)l2_norm;
+
+	return 0;
+}
+
+int calc_scaled_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual)
 {
 	// Residual of equation Ax=b, should go to zero as solution converges. Can be used to check for convergence and also for debugging to make sure residual is decreasing after each iteration. Note that this is not the same as epsilon which is the maximum % change in phi values between iterations, but they should be correlated.
 	//double residual = 0.0;
@@ -1280,7 +1317,7 @@ int calc_epsilon(cell *cells,
 	double h = pow(V_sum / NSOLCELLS, 1./ND);
 
 	*epsilon = C_EPSILON * h * h;
-	
+
     return 0;
 }
 
@@ -1298,5 +1335,302 @@ int build_gradient(Vec* b, double* grad, int COMP, cell* cells, int* NCELLS, int
 		PetscCall(VecSetValues(*b, 1, &i, &val_bC, ADD_VALUES));
 		//b[i] += grad[IDX(C->id, COMP, 3)]; // Add contribution to source term for cell C
 	}
+	return 0;
+}
+
+/* ---------------------- Numerical Divergence of field --------------------- */
+// Returns divergence of a vector field at each cell
+int num_div(double** phi, double** grad, int eq_ids[static ND], cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* div_phi)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+
+	/* Vec div_phi; 
+
+	// Create vector to store divergence of phi vector
+	PetscCall(VecCreate(PETSC_COMM_WORLD, &div_phi));
+	PetscCall(VecSetSizes(div_phi, PETSC_DECIDE, NSOLCELLS));
+	PetscCall(VecSetFromOptions(div_phi));
+
+	// Set all entries to zero 
+	PetscCall(VecZeroEntries(div_phi));	 */
+
+	// Loop over all faces and add contributions to the b vector for owner cell C and neighbor cell F
+	for (int i = 0; i < *NFACES; i++)
+	{
+		
+		face* f = &faces[i]; //current face 
+
+		cell* C = &cells[f->owner]; //owner cell
+		cell* F = &cells[f->neighbor]; //neighbor cell
+
+	/* 	int C_sol_idx = C->id - (*NDEGEN_CELLS);
+		int F_sol_idx = F->id - (*NDEGEN_CELLS); */
+
+		// Calculate rf' position vector
+		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
+		double Sf_mag = mag(Sf); // magnitude of face area vector
+
+		// Handle boundary faces
+		if (f->boundary_face)
+		{
+			double vec_f[3] = {0.0, 0.0, 0.0};
+
+			for (int dims = 0; dims < ND; dims++)
+			{
+				// Boundary value already imposed by applyBoundary().
+				vec_f[dims] = phi[eq_ids[dims]][F->id];
+			}
+
+			int C_sol_idx = C->id - *NDEGEN_CELLS;
+			//PetscScalar val_bC = dot(vec_f, Sf);
+			div_phi[C_sol_idx] += dot(vec_f, Sf); // contribution to owner cell C
+			//PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
+			continue;
+		}
+
+		// Calculate position vectors/ Geometry stuff
+		double ef[3] = {Sf[0]/Sf_mag, Sf[1]/Sf_mag, Sf[2]/Sf_mag}; // Normal vector of face
+
+		double rCF[3] = {
+			F->xc - C->xc,
+			F->yc - C->yc,
+			F->zc - C->zc
+		}; // position vector from cell C centroid to cell F centroid
+
+		double dCF = mag(rCF); // distance between cell centroids
+
+		double rCf[3] = {
+			f->xc - C->xc,
+			f->yc - C->yc,
+			f->zc - C->zc
+		}; // position vector from cell C centroid to face f centroid
+
+		double g_f = dot(rCf, ef)/dot(rCF, ef); // interpolation factor for gradient at face based on normal distances
+
+		// vector to the normal intersection of the face from cell C centroid
+		double rf_prime[3] = {
+			(1 - g_f) * C->xc + g_f * F->xc,
+			(1 - g_f) * C->yc + g_f * F->yc,
+			(1 - g_f) * C->zc + g_f * F->zc
+		};
+
+		double r_f_prime_f[3] = {
+			f->xc - rf_prime[0],
+			f->yc - rf_prime[1],
+			f->zc - rf_prime[2]
+		}; // vector from face intersection to face centroid
+
+		// Do not need a boundary face if statement since the values of the scalar at the boundary should be stored in phi
+		double vec_C[3] = {0.0, 0.0, 0.0};
+		double vec_F[3] = {0.0, 0.0, 0.0};
+		double vec_f_prime[3] = {0.0, 0.0, 0.0}; 
+		double vec_f[3] = {0.0, 0.0, 0.0};
+
+		// velocity vector gradient
+		double jacobian_C[ND][3]; // jacobian for cell c, gradient of velocity vector
+		double jacobian_F[ND][3]; // jacobian for cell F, gradient of velocity vector
+		double jacobian_f_prime[ND][3]; // jacobian for face f, gradient of velocity vector
+		
+		// Assemble vectors. loop over components
+		for (int dims = 0; dims < ND; dims++)
+		{
+			vec_C[dims] = phi[eq_ids[dims]][C->id];
+			vec_F[dims] = phi[eq_ids[dims]][F->id];
+
+			// Interpolate the vector to face intersection
+			scal2face(&vec_f_prime[dims], f, C, F, vec_C[dims], vec_F[dims], rCF, dCF);
+
+			// interpolate gradient of each vector component
+			// get the gradient component (all ways 3) at the centroid
+			jacobian_C[dims][0] = grad[eq_ids[dims]][IDX(0, C->id, 3)];
+			jacobian_C[dims][1] = grad[eq_ids[dims]][IDX(1, C->id, 3)];
+			jacobian_C[dims][2] = grad[eq_ids[dims]][IDX(2, C->id, 3)];
+
+			jacobian_F[dims][0] = grad[eq_ids[dims]][IDX(0, F->id, 3)];
+			jacobian_F[dims][1] = grad[eq_ids[dims]][IDX(1, F->id, 3)];
+			jacobian_F[dims][2] = grad[eq_ids[dims]][IDX(2, F->id, 3)];
+
+			// interpolate gradients to face
+			grad2face(jacobian_f_prime[dims], jacobian_C[dims], jacobian_F[dims], rCF, dCF, vec_C[dims], vec_F[dims], C, F, f);
+
+			// Correct face values for skewness
+			vec_f[dims] = vec_f_prime[dims] + dot(jacobian_f_prime[dims], r_f_prime_f); 
+		}
+
+		// Calculate and add RHS vector contributions
+		int C_sol_idx = C->id - *NDEGEN_CELLS; // index of cell C in solution arrays, adjust for degenerate cells
+		int F_sol_idx = F->id - *NDEGEN_CELLS; // index of cell F in solution arrays, adjust for degenerate cells
+
+		div_phi[C_sol_idx] += dot(vec_f, Sf); // contribution to owner cell C
+		//PetscScalar val_bC = dot(vec_f, Sf); // contribution to owner cell C
+		//PetscCall(VecSetValues(*b, 1, &C_sol_idx, &val_bC, ADD_VALUES));
+		//b[C->id] += dot(vec_f, Sf); // contribution to owner
+
+		if (!f->boundary_face)
+		{
+			div_phi[F_sol_idx] += -dot(vec_f, Sf); // contribution to neighbor cell F (negative since normal vector points outward from owner cell)
+		//PetscScalar val_bF = -dot(vec_f, Sf); // contribution to neighbor cell F (negative since normal vector points outward from owner cell)
+		//PetscCall(VecSetValues(*b, 1, &F_sol_idx, &val_bF, ADD_VALUES));
+		//b[F->id] += -dot(vec_f, Sf); // contribution to neighbor cell F
+		}
+	}	
+
+	//Divide by cell volume to convert from flux to divergence
+	for (int i = 0; i < NSOLCELLS; i++)
+	{		
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+		div_phi[i] /= C->volume;
+	}
+
+	return 0;
+}
+
+/* ----- Numerical Laplacian of a field, returns laplacian at each cell ----- */
+int num_lap(double* phi, double* grad, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* lap_phi)
+{
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	// Loop over all faces and add contributions to the b vector for owner cell C and neighbor cell F
+	for (int i = 0; i < *NFACES; i++)
+	{
+		face* f = &faces[i]; //current face 
+
+		cell* C = &cells[f->owner]; //owner cell
+		cell* F = &cells[f->neighbor]; //neighbor cell
+
+		// Calculate position vectors/ Geometry stuff
+		double rCF[3] = {
+			F->xc - C->xc,
+			F->yc - C->yc,
+			F->zc - C->zc
+		}; // position vector from cell C centroid to cell F centroid
+
+		double dCF = mag(rCF); // distance between cell centroids
+
+		// Calculate rf' position vector
+		double Sf[3] = {f->Sx, f->Sy, f->Sz}; //face area vector
+		double Sf_mag = mag(Sf); // magnitude of face area vector
+		double ef[3] = {Sf[0]/Sf_mag, Sf[1]/Sf_mag, Sf[2]/Sf_mag}; // Normal vector of face
+
+		// Calculate gradient at face using grad2face
+		double grad_C[3] = {
+			grad[3*C->id],
+			grad[3*C->id + 1],
+			grad[3*C->id + 2]
+		};
+
+		double grad_F[3] = {
+			grad[3*F->id],
+			grad[3*F->id + 1],
+			grad[3*F->id + 2]
+		};
+
+		double grad_f[3];
+		grad2face(grad_f, grad_C, grad_F, rCF, dCF, phi[C->id], phi[F->id], C, F, f); // Gradient at face centroid
+
+		// dot gradient with surface vector
+		// Add RHS contributions to b vector for owner cell C and neighbor cell F
+		// index for solution arrays, dont include boundary faces 
+		int C_sol_idx = C->id - *NDEGEN_CELLS; 
+		int F_sol_idx = F->id - *NDEGEN_CELLS; 
+
+		lap_phi[C_sol_idx] += dot(grad_f, Sf); // contribution to owner cell C
+
+		if (!f->boundary_face)
+		{
+			lap_phi[F_sol_idx] += -dot(grad_f, Sf); // contribution to neighbor cell F (negative since normal vector points outward from owner cell)
+		}
+		 //b[C->id] += coeff * dot(grad_f, Sf); // contribution to owner cell C
+		 //b[F->id] += -coeff * dot(grad_f, Sf); // contribution to neighbor cell F
+	}
+
+	//Divide by cell volume to convert from flux to divergence
+	for (int i = 0; i < NSOLCELLS; i++)
+	{		
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+		lap_phi[i] /= C->volume;
+	}
+
+	return 0;
+}
+
+/* ---------------------- Momentum Eqn residual routine --------------------- */
+int mom_l2_residual(double* phi, double* grad, int COMP, double* p, double* grad_p, const diffusionCoeff GAMMA,
+	 cell* cells, face* faces, int NCELLS, int NDEGEN_CELLS, int NFACES, double* res)
+{
+
+	int NSOLCELLS = NCELLS - NDEGEN_CELLS;
+
+	*res = 0.0;
+	double cell_residual;
+
+	double* lap_u = malloc((NSOLCELLS) * sizeof(double));
+	if (lap_u == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for lap_u array.\n");
+		return 1;
+	}
+	memset(lap_u, 0, NSOLCELLS * sizeof(double));
+	num_lap(phi, grad, cells, faces, &NCELLS, &NDEGEN_CELLS, &NFACES, lap_u);
+
+	for (int i = NDEGEN_CELLS; i < NCELLS; i++)
+	{
+		cell* C = &cells[i];
+
+		double source = SOURCE_TERMS[COMP](C, 0.0);
+
+		cell_residual = -grad_p[C->id*3 + COMP] + GAMMA*lap_u[i - NDEGEN_CELLS] - source; 
+
+		cell_residual *= cell_residual; // Square the residual for L2 norm
+		*res += cell_residual; // Sum the squared residuals
+	}
+	*res = sqrt(*res); // Take the square root of the sum to get the L2 norm
+	free(lap_u);
+	return 0;
+}
+
+int continuity_l2_residual(double** phi, double** grad, double* p, double* grad_p,
+	 int eq_ids[static ND], cell* cells, face* faces, int* NCELLS,
+	  int* NDEGEN_CELLS, int* NFACES, double epsilon, double* res)
+{
+	// Compute divergence of velocity field
+	int NSOLCELLS = (*NCELLS) - (*NDEGEN_CELLS);
+	double* div_u = malloc((NSOLCELLS) * sizeof(double));
+	if (div_u == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for div_phi array.\n");
+		return 1;
+	}
+	memset(div_u, 0, NSOLCELLS * sizeof(double));
+	num_div(phi, grad, eq_ids, cells, faces, NCELLS, NDEGEN_CELLS, NFACES, div_u);
+
+	// Compute laplacian of pressrue field
+	double* lap_p = malloc((NSOLCELLS) * sizeof(double));
+	if (lap_p == NULL)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for lap_p array.\n");
+		free(div_u); // Free previously allocated div_phi before exiting
+		return 1;
+	}
+	memset(lap_p, 0, NSOLCELLS * sizeof(double));
+	num_lap(p, grad_p, cells, faces, NCELLS, NDEGEN_CELLS, NFACES, lap_p);
+
+	*res = 0.0;
+	double cell_residual;
+
+	for (int i = 0; i < NSOLCELLS; i++)
+	{
+		cell* C = &cells[i + (*NDEGEN_CELLS)];
+
+		// Source for pressure correction eqn is -g
+		double source = SOURCE_TERMS[PCORR](C, 0.0);
+		
+		cell_residual = div_u[i] - epsilon*lap_p[i] + source;
+		cell_residual *= cell_residual; // Square the residual for L2 norm
+		*res += cell_residual; // Sum the squared residuals
+	}
+	*res = sqrt(*res); // Take the square root of the sum to get the L2 norm
+	
+	free(div_u);
+	free(lap_p);
 	return 0;
 }

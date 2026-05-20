@@ -82,15 +82,9 @@ int explicit_update(Mat* A, Vec* b, double* phi, cell* cells, face* faces, doubl
 /* -------------------------------------------------------------------------- */
 int maxChng(double* phi, double* phi_old, int* NCELLS, int* NDEGEN_CELLS, double* epsilon);
 
-int calc_Residual(Mat* A,
-	Vec* b,
-	double* phi,
-	cell* cells,
-	face* faces,
-	int* NCELLS,
-	int* NDEGEN_CELLS,
-	int* NFACES,
-	double* residual);
+int calc_scaled_Residual(Mat* A, Vec* b, double* phi, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* scaled_residual);
+
+int calc_l2_norm(Mat* A, Vec* b, double* phi, int NCELLS, int NDEGEN_CELLS, double* norm);
 
 /* -------------------------------------------------------------------------- */
 /* Boundary routines */
@@ -111,5 +105,16 @@ int calc_epsilon(cell *cells,
                  int *NDEGEN_CELLS,
                  double *epsilon);
 
+int num_div(double** phi, double** grad, int eq_ids[static ND], cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* div_phi);
+
+int num_lap(double* phi, double* grad, cell* cells, face* faces, int* NCELLS, int* NDEGEN_CELLS, int* NFACES, double* lap_phi);
+
+int mom_l2_residual(double* phi, double* grad, int COMP, double* p, double* grad_p, const diffusionCoeff GAMMA,
+	 cell* cells, face* faces, int NCELLS, int NDEGEN_CELLS, int NFACES, double* res);
+	
+
+int continuity_l2_residual(double** phi, double** grad, double* p, double* grad_p,
+	 int eq_ids[static ND], cell* cells, face* faces, int* NCELLS,
+	  int* NDEGEN_CELLS, int* NFACES, double epsilon, double* res);
 
 #endif // !SOLVER_H
